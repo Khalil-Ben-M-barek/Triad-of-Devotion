@@ -2,11 +2,12 @@ import pygame
 import sys
 import random
 
-white = (255,255,255)
-blue = (0,0,150)
-gray = (100,100,100)
-yellow = (255,255,0)
-orange = (255,165,0)
+white = (255, 255, 255)
+blue = (0, 0, 150)
+gray = (100, 100, 100)
+yellow = (255, 255, 0)
+orange = (255, 165, 0)
+green = (0, 255, 0)
 
 menu_rect = (100,420,500,150) #x, y, width, and height
 battle_menu = [["Attack", "Magic"], ["Synergy Ability", "Potential Breach"]]
@@ -17,12 +18,15 @@ boss_hp, boss_max_hp = 6000, 6000
 potential_val, potential_max = 0, 100
 
 def take_damage(amount, target = "ethan"):
-    global ethan_hp, potential_val
+    global ethan_hp, potential_val, boss_hp
     if target == "ethan":
         ethan_hp -= amount
         potential_gain = (amount / ethan_max_hp) * 170
         potential_val = min(potential_max, potential_val + potential_gain) # To not exceed the max
         print(f"Ethan took {amount} damage! \n Potential gauge increased")
+
+    elif target == "boss":
+        boss_hp -= amount
 
 def draw_potential_bar(surface, x, y):
     pygame.draw.rect(surface, gray, (x, y, 150, 20))
@@ -32,11 +36,16 @@ def draw_potential_bar(surface, x, y):
     pygame.draw.rect(surface, white, (x, y, 150, 20), 1) # Border
 
 def draw_battle_menu(surface, font, col, row, cur_menu, sub_row):
+    global boss_hp, boss_max_hp, boss_base_x, boss_base_y
     pygame.draw.rect(surface, blue, menu_rect)
     pygame.draw.rect(surface, white, menu_rect, 2)
     pygame.draw.rect(surface, gray, (620, 480, 150, 15)) # HP bar
-    pygame.draw.rect(surface, (0, 255, 0), (620, 480, (ethan_hp / ethan_max_hp) * 150, 15))
+    pygame.draw.rect(surface, green, (620, 480, (ethan_hp / ethan_max_hp) * 150, 15))
     surface.blit(font.render(f"HP: {ethan_hp}/{ethan_max_hp}", True, white), (620, 460))
+
+    pygame.draw.rect(surface, gray, (boss_base_x - 20, boss_base_y - 20, 150, 15)) # HP bar
+    pygame.draw.rect(surface, green, (boss_base_x - 20, boss_base_y - 20, (boss_hp / boss_max_hp) * 150, 15))
+    surface.blit(font.render(f"HP: {boss_hp}/{boss_max_hp}", True, white), (boss_base_x - 20, boss_base_y - 50))
 
     if cur_menu == "MAIN BATTLE MENU":
         for c in range(2):
@@ -82,6 +91,8 @@ def main():
     
     ethan_img = pygame.transform.scale(ethan_img, (150, 200))
 
+    
+    global boss_base_x, boss_base_y
     ethan_base_x, ethan_base_y = 550, 250
     boss_base_x, boss_base_y = 150, 50
 
@@ -155,6 +166,7 @@ def main():
 
                 enemy_is_attacking = True
                 enemy_attack_timer = 40
+                take_damage(random.randint(100, 150), "boss")
         if enemy_is_attacking:
             if enemy_attack_timer > 25: # first phase of the animation
                 boss_x += 20
