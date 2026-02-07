@@ -72,30 +72,30 @@ class Characters:
             potential_gain = (amount / self.max_hp) * 170
             self.potential_value = min(self.max_potential_value, self.potential_value + potential_gain) # To not exceed the max
 
-def draw_individual_menus(screen, small_font, party, active_hero_index):
+def draw_individual_menus(virtual_screen, small_font, party, active_hero_index):
     for i, hero in enumerate(party):
         box_width, box_height = 200, 80
         box_x = 580
         box_y = 340 + (i * 75)
         color = (0, 180, 200) if i == active_hero_index else white
-        pygame.draw.rect(screen, (15, 25, 35), (box_x, box_y, box_width, box_height))
-        pygame.draw.rect(screen, color, (box_x, box_y, box_width, box_height), 2)
+        pygame.draw.rect(virtual_screen, (15, 25, 35), (box_x, box_y, box_width, box_height))
+        pygame.draw.rect(virtual_screen, color, (box_x, box_y, box_width, box_height), 2)
 
         name_surface = small_font.render(hero.name, True, color)
         hp_surface = small_font.render(f"HP: {hero.hp}/{hero.max_hp}", True, white)
         mp_surface = small_font.render(f"MP: {hero.mp}/{hero.max_mp}", True, white)
 
-        screen.blit(name_surface, (box_x + 10, box_y + 5))
-        screen.blit(hp_surface, (box_x + 10, box_y + 20))
-        screen.blit(mp_surface, (box_x + 10, box_y + 35))
+        virtual_screen.blit(name_surface, (box_x + 10, box_y + 5))
+        virtual_screen.blit(hp_surface, (box_x + 10, box_y + 20))
+        virtual_screen.blit(mp_surface, (box_x + 10, box_y + 35))
 
         hp_bar_x, hp_bar_y, hp_bar_width = box_x + 105, box_y + 25, 80
-        pygame.draw.rect(screen, (80, 80, 80), (hp_bar_x, hp_bar_y, hp_bar_width, 10))
+        pygame.draw.rect(virtual_screen, (80, 80, 80), (hp_bar_x, hp_bar_y, hp_bar_width, 10))
         
         hp_ratio = hero.hp / max(1, hero.max_hp)
         hp_color = green if hp_ratio > 0.4 else yellow if hp_ratio > 0.15 else red
-        pygame.draw.rect(screen, hp_color, (hp_bar_x, hp_bar_y, hp_bar_width * hp_ratio, 10))
-        pygame.draw.rect(screen, white, (hp_bar_x, hp_bar_y, hp_bar_width, 10), 1)
+        pygame.draw.rect(virtual_screen, hp_color, (hp_bar_x, hp_bar_y, hp_bar_width * hp_ratio, 10))
+        pygame.draw.rect(virtual_screen, white, (hp_bar_x, hp_bar_y, hp_bar_width, 10), 1)
 
 
         for synergy_bar_number in range(hero.max_synergy_bars):
@@ -105,17 +105,17 @@ def draw_individual_menus(screen, small_font, party, active_hero_index):
                 synergy_bar_color = (0, 200, 255)
             else:
                 synergy_bar_color = (50, 50, 50)
-            pygame.draw.rect(screen, synergy_bar_color, (synergy_bar_x, synergy_bar_y, 5, 12))
+            pygame.draw.rect(virtual_screen, synergy_bar_color, (synergy_bar_x, synergy_bar_y, 5, 12))
             
         potential_x, potential_y = box_x + 90, box_y + 55
         potential_is_full = hero.potential_value >= hero.max_potential_value
         potential_text = "POTENTIAL BREACH" if potential_is_full else "POTENTIAL"
         potential_color = orange if hero.potential_value >= hero.max_potential_value else white
         potential_fill_width = (hero.potential_value / hero.max_potential_value) * 100
-        pygame.draw.rect(screen, (80, 80, 80), (potential_x, potential_y, 100, 15))
-        pygame.draw.rect(screen, potential_color, (potential_x, potential_y, potential_fill_width, 15))
-        pygame.draw.rect(screen, white, (potential_x, potential_y, 100, 15), 1) # Border
-        screen.blit(small_font.render(potential_text, True, potential_color), (potential_x, potential_y - 20))
+        pygame.draw.rect(virtual_screen, (80, 80, 80), (potential_x, potential_y, 100, 15))
+        pygame.draw.rect(virtual_screen, potential_color, (potential_x, potential_y, potential_fill_width, 15))
+        pygame.draw.rect(virtual_screen, white, (potential_x, potential_y, 100, 15), 1) # Border
+        virtual_screen.blit(small_font.render(potential_text, True, potential_color), (potential_x, potential_y - 20))
 
 def get_unique_abilities(hero):
     abilities = ["Basic Attack"]
@@ -135,14 +135,14 @@ def get_unique_abilities(hero):
     abilities.append("Back")
     return abilities
 
-def draw_battle_menu(screen, font, col, row, cur_menu, sub_row, enemy, protect_options, hero, current_options):
+def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, protect_options, hero, current_options):
 
-    pygame.draw.rect(screen, blue, menu_rect)
-    pygame.draw.rect(screen, white, menu_rect, 2)
+    pygame.draw.rect(virtual_screen, blue, menu_rect)
+    pygame.draw.rect(virtual_screen, white, menu_rect, 2)
 
-    pygame.draw.rect(screen, gray, (enemy.base_x - 20, enemy.base_y - 20, 150, 15)) # HP bar
-    pygame.draw.rect(screen, green, (enemy.base_x - 20, enemy.base_y - 20, (enemy.hp / enemy.hp) * 150, 15))
-    screen.blit(font.render(f"HP: {enemy.hp}/{enemy.max_hp}", True, white), (enemy.base_x - 20, enemy.base_y - 50))
+    pygame.draw.rect(virtual_screen, gray, (enemy.base_x - 20, enemy.base_y - 20, 150, 15)) # HP bar
+    pygame.draw.rect(virtual_screen, green, (enemy.base_x - 20, enemy.base_y - 20, (enemy.hp / enemy.hp) * 150, 15))
+    virtual_screen.blit(font.render(f"HP: {enemy.hp}/{enemy.max_hp}", True, white), (enemy.base_x - 20, enemy.base_y - 50))
 
     if cur_menu == "MAIN BATTLE MENU":
         for c in range(2):
@@ -160,12 +160,12 @@ def draw_battle_menu(screen, font, col, row, cur_menu, sub_row, enemy, protect_o
                 if c == col and r == row:
                     text_color = yellow
                 
-                screen.blit(font.render(text, True, text_color), (tx, ty))
+                virtual_screen.blit(font.render(text, True, text_color), (tx, ty))
 
                 if c == col and r == row:
                     pointer_x = (tx - 35)
                     pointer_y = (ty + 10)
-                    pygame.draw.polygon(screen, white, [(pointer_x, pointer_y), (pointer_x + 15, pointer_y + 7), (pointer_x, pointer_y + 14)])
+                    pygame.draw.polygon(virtual_screen, white, [(pointer_x, pointer_y), (pointer_x + 15, pointer_y + 7), (pointer_x, pointer_y + 14)])
 
     elif cur_menu == "ATTACK SUBMENU" or cur_menu == "PROTECT SUBMENU":
         options = current_options if cur_menu  == "ATTACK SUBMENU" else protect_options
@@ -173,13 +173,17 @@ def draw_battle_menu(screen, font, col, row, cur_menu, sub_row, enemy, protect_o
             tx = menu_rect[0] + 60
             ty = menu_rect[1] + 15 + (i * 32)
             text_color = yellow if i == sub_row else white
-            screen.blit(font.render(text, True, text_color), (tx, ty))
+            virtual_screen.blit(font.render(text, True, text_color), (tx, ty))
             if i == sub_row:
-                pygame.draw.polygon(screen, white, [(tx - 35, ty + 10), (tx - 20, ty + 17), (tx - 35, ty + 24)])
+                pygame.draw.polygon(virtual_screen, white, [(tx - 35, ty + 10), (tx - 20, ty + 17), (tx - 35, ty + 24)])
 
 def main():
     pygame.init()
-    screen = pygame.display.set_mode((800,600))
+    internal_res = (800, 600)
+    display_res = (1280, 720)
+    
+    window = pygame.display.set_mode(display_res, pygame.RESIZABLE)
+    virtual_screen = pygame.Surface(internal_res)
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("Arial", 22)
     small_font = pygame.font.SysFont("Arial", 16)
@@ -211,21 +215,25 @@ def main():
     current_options = []
     is_runniung = True
     while is_runniung:
-        screen.fill((30,30,30))
+        virtual_screen.fill((30, 30, 30))
         hero = party[active_hero_index]
 
-        screen.blit(enemy.image, (enemy.x, enemy.y))
+        virtual_screen.blit(enemy.image, (enemy.x, enemy.y))
         for p in party:
-            screen.blit(p.image, (p.x, p.y))
+            virtual_screen.blit(p.image, (p.x, p.y))
 
-        draw_individual_menus(screen, small_font, party, active_hero_index)
-        draw_battle_menu(screen, font, cur_col, cur_row, cur_menu, sub_row, enemy, protect_options, hero, current_options)
+        draw_individual_menus(virtual_screen, small_font, party, active_hero_index)
+        draw_battle_menu(virtual_screen, font, cur_col, cur_row, cur_menu, sub_row, enemy, protect_options, hero, current_options)
 
         protect_options = [p.name for p in party if p != hero] + ["Back"]
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 is_runniung = False
+
+            if event.type == pygame.VIDEORESIZE:
+                display_res = (event.w, event.h)
+                window = pygame.display.set_mode(display_res, pygame.RESIZABLE)
 
             if event.type == pygame.KEYDOWN:
                 if cur_menu == "MAIN BATTLE MENU":
@@ -327,9 +335,11 @@ def main():
                 target_hero.take_damage(random.randint(100,150), party)
                 for p in party:
                     p.is_protecting_target = None
-                    
+
                 active_hero_index = (active_hero_index + 1) % len(party)
 
+        scaled_surface = pygame.transform.smoothscale(virtual_screen, display_res)
+        window.blit(scaled_surface, (0, 0))
         pygame.display.flip()
         clock.tick(60)
 
