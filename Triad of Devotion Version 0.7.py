@@ -16,21 +16,15 @@ protect_used_this_turn = False
 current_hover_text = ""
 scroll_x = 440
 
-class SynergyAbility:
-    def __init__(self, name, description, partner, perk_type, damage):
-        self.name = name
-        self.description = description
-        self.synergy_partner = partner
-        self.perk_type = perk_type
-        self.damage = damage
-        self.synergy_bars_required = 3
 
 DESCRIPTIONS = {
     "Potential Breach": (
         "A powerful attack available when a character's Potential gauge is full. " 
         "The Potential gauge increases when the character takes damage. "
-        "When filled, the character can spend the Potential gauge to perform a powerful attack. "   
-         "Certain synergy abilities level up a character's Potential attack, significantly increasing the damage."
+        "Certain synergy abilities level up a character's Potential attack, "
+        "either significantly increasing the damage or adding special effects. "
+        "When filled, the character can spend the Potential gauge and a potential level "
+        "(if greater than 1) to perform a powerful attack."
     ),
     "Synergy Abilities": (
         "Powerful attacks tied to the number of bars in a character's menu. " 
@@ -48,7 +42,7 @@ DESCRIPTIONS = {
     "Charge": (
         "Charges Elena's 'Chi' by 1 level (max 2). Can't be used back-to-back. " 
         "Charged levels unlock two special attacks: Brute Force (requires 1 Chi) and Heavy Barrage (requires 2 Chi). " 
-        "When using a charged attack, one chi level is consumed." 
+        "When using a charged attack, one Chi level is consumed." 
     ),          
     "Brute Force": (
         "Unlocked once Elena has at least 1 Chi. " 
@@ -68,12 +62,11 @@ DESCRIPTIONS = {
     ),
     "Protect Stance": (
         "Any ally can enter this stance and choose one other ally to protect and gain synergy bars with. " 
-        "If the next enemy attack is directed at the PROTECTED target AND the normal block command is successful, the damage is "
-        "nullified for that attack and both the protector and the protected gain 1 synergy bar. " 
-        "If the block fails, both the protected character AND the protector take the full attack damage. " 
-        "If the enemy attacks anyone other than the protected target (including the protector), the Protect Stance is cancelled. " 
-        "This stance can only be entered once between enemy turns for the whole party. " 
-        "That means that only one protector action is allowed before the enemy acts again." 
+        "If the next enemy attack is directed at the protected target and the normal block command is successful, "
+        "the damage is nullified for that attack and both the protector and the protected gain 1 synergy bar. " 
+        "If the block fails, both take half the attack damage. " 
+        "If the enemy attacks anyone other than the protected target (including the protector), the Protect Stance fails. " 
+        "Only one hero may initiate this stance per party rotation (until all three heroes have acted)."  
     ), 
     "Flurry Slash": "Ethan's Level 1 Potential Breach. Ethan's weakest Potential Breach.",
 
@@ -87,7 +80,17 @@ DESCRIPTIONS = {
 
     "Celestial Tempest": "Elena's Level 3 Potential Breach. Elena's most powerful attack.",
 
-    "Soothing Gale": "Evelyn's only Potential Breach. Restores half the maximum HP of the entire party.",
+    "Soothing Gale": "Evelyn's level 1 Potential Breach. Restores half the maximum HP of the entire party.",
+    
+    "Potential Impart": "Evelyn's level 2 Potential Breach. Completely fills the other two allies' Potential gauges.",
+
+    "full restore": "Evelyn's level 3 Potential Breach. Fully restores the HP and MP of the entire party.",
+
+    "Vicious Dash": "For Ethan and Elena. Requires 3 Synergy bars. Deals moderate damage and revives the potential level of the characters who performed it.",
+
+    "Explosive Impact": "For Ethan and Evelyn. Requires 3 Synergy bars. Deals moderate damage and grants unpotentialed MP for the next spell of each character who performed it.",
+
+    "Synchro Blast": "For Elena and Evelyn. Requires 4 Synergy bars. Deals moderate damage and grants both a potential level increase for each character who performed it and 0 MP cost MP for each of their next spell castings.",
 
     "Back": "Return to the previous menu.",
 
@@ -110,7 +113,7 @@ DESCRIPTIONS = {
 POTENTIAL_MOVES = {
     "Ethan": {1: "Flurry Slash", 2: "Heavenly Descent", 3: "Final Blow"},
     "Elena": {1: "Spinning Kick", 2: "Tidal Onslaught", 3: "Celestial Tempest"},
-    "Evelyn": {1: "Soothing Gale"}
+    "Evelyn": {1: "Soothing Gale", 2: "Potential Impart", 3: "full restore"}
 }
 
 ENABLER_STATS = {
@@ -122,9 +125,23 @@ ENABLER_STATS = {
     "Strike": 20
 }
 
-# revive: 25 to 30. healing/healing 40 to 60. 
-# to add potential seize with mp cost and the manip enabler with mp cost and healing and attack spells
-# to implement: synergy bars gained after entering a protect partner stance and blocking a full attack against that partner (both gain a bar). if blocking is missed, the character with the stance takes the full damage too. the protect stance can only be entered once before each enemy turn. if the enemy attacks anyone other than the protected (including the initiator), the protective stance fizzles and the system returns to normal
+# The synergy logic needs to be revamped to fix hero being both hero and partner
+# The synergy ability option should be inaccessible and grayed out when none of the hero's requirements are met
+# The synergy ability option isn't being grayed out correctly 
+
+class SynergyAbility:
+    def __init__(self, name, partner, bars_required, perk_type, damage):
+        self.name = name
+        self.synergy_partner = partner
+        self.perk_type = perk_type # Can be "POTENTIAL_LEVEL_UP", "ZERO_MP_COST", or "BOTH"
+        self.damage = damage
+        self.synergy_bars_required = bars_required
+
+SYNERGY_MOVES = [
+    SynergyAbility("Vicious Dash", "Elena", 3, "POTENTIAL_LEVEL_UP", 400),
+    SynergyAbility("Explosive Impact", "Evelyn", 3, "ZERO_MP_COST", 400),
+    SynergyAbility("Synchro Blast", "Evelyn", 4, "BOTH", 500)
+]
 
 class Characters:
     def __init__(self, name, hp, mp, x, y, image_path, is_enemy = False):
@@ -143,6 +160,7 @@ class Characters:
         self.synergy_bars = 0
         self.max_synergy_bars = 5
         self.is_protecting_target = None
+        self.forced_target = None
         self.chi_level = 0
         self.cooldowns = {"Counter": 0, "Twin Cast": 0, "Charge": 0}
         self.image = pygame.image.load(image_path).convert_alpha()
@@ -162,9 +180,8 @@ class Characters:
             self.hp = min(self.max_hp, self.hp + amount)
 
     def take_damage(self, amount, party, attacker=None):
-        if not self.is_enemy and self.cooldowns.get("Counter", 0) > 0:
+        if not self.is_enemy and self.cooldowns["Counter"] > 0:
             return # Damage is nullified
-
 
         protector = None
         for p in party:
@@ -179,14 +196,21 @@ class Characters:
                 protector.is_protecting_target = None
                 return
             else:
-                self.hp = max(0, self.hp - amount)
-                protector.hp = max(0, protector.hp - amount)
+                self.hp = max(0, self.hp - amount // 2)
+                protector.hp = max(0, protector.hp - amount // 2)
                 protector.is_protecting_target = None
                 return
 
         if attacker and attacker.last_attack_blocked:
             amount = 0
             
+        if attacker and attacker.is_enemy and attacker.forced_target:
+            new_target = attacker.forced_target
+            attacker.forced_target = None
+            if new_target != self:
+                new_target.take_damage(amount, party, attacker)
+                return
+
         self.hp = max(0, self.hp - amount)
 
         if not self.is_enemy:
@@ -195,7 +219,7 @@ class Characters:
 
 def get_potential_options(hero):
     if hero.name in POTENTIAL_MOVES:
-        level = hero.potential_level if hero.name != "Evelyn" else 1
+        level = hero.potential_level
         return [POTENTIAL_MOVES[hero.name][level], "Back"]
     return ["Back"]
 
@@ -248,6 +272,9 @@ def draw_individual_menus(virtual_screen, small_font, party, active_hero_index):
             potential_bar_color = yellow if hero.potential_level > lvl else (50, 50, 50)
             pygame.draw.rect(virtual_screen, potential_bar_color, (potential_x + 105 + (lvl * 6), potential_y, 3, 15))
 
+
+
+
 def get_unique_abilities(hero):
     abilities = ["Basic Attack"]
     if hero.name == "Ethan":
@@ -266,7 +293,7 @@ def get_unique_abilities(hero):
     abilities.append("Back")
     return abilities
 
-def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, protect_options, hero, attack_options, potential_options, magic_options):
+def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, protect_options, hero, attack_options, potential_options, magic_options, synergy_options, party):
     global current_hover_text, scroll_x
 
     pygame.draw.rect(virtual_screen, blue, menu_rect)
@@ -278,6 +305,7 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
     current_hover_text = ""
     active_y = menu_rect[1] + 15
     options = []
+    
 
     if cur_menu == "MAIN BATTLE MENU":
         if row >= len(battle_menu[col]):
@@ -296,10 +324,13 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
                 if text == "Potential Breach" and hero.potential_value < hero.max_potential_value:
                     text_color = gray
                 elif text == "Synergy Abilities":
-                    text_color = gray
+                    if hero.synergy_bars < 3:
+                        for p in party:
+                            if p != hero and p.synergy_bars < 3:
+                                text_color = gray
                 elif text == "Protect Stance" and protect_used_this_turn:
                     text_color = gray
-                if c == col and r == row:
+                if c == col and r == row and text_color != gray:
                     text_color = yellow
                 
                 virtual_screen.blit(font.render(text, True, text_color), (tx, ty))
@@ -309,7 +340,7 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
                     pointer_y = (ty + 10)
                     pygame.draw.polygon(virtual_screen, white, [(pointer_x, pointer_y), (pointer_x + 15, pointer_y + 7), (pointer_x, pointer_y + 14)])
 
-    elif cur_menu in ["ATTACK SUBMENU", "PROTECT SUBMENU", "POTENTIAL SUBMENU", "MAGIC SUBMENU"]:
+    elif cur_menu in ["ATTACK SUBMENU", "PROTECT SUBMENU", "POTENTIAL SUBMENU", "MAGIC SUBMENU", "SYNERGY SUBMENU", "HEALING TARGET SUBMENU", "MANIPULATE TARGET SUBMENU", "SEIZE TARGET SUBMENU", "REVIVAL TARGET SUBMENU"]:
         if cur_menu == "ATTACK SUBMENU": 
             options = attack_options
         elif cur_menu == "PROTECT SUBMENU":
@@ -318,6 +349,16 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
             options = magic_options
         elif cur_menu == "POTENTIAL SUBMENU":
             options = potential_options
+        elif cur_menu == "SYNERGY SUBMENU":
+            options = synergy_options
+        elif cur_menu == "HEALING TARGET SUBMENU":
+            options = [p.name for p in party if  0 < p.hp < p.max_hp] + ["Back"]
+        elif cur_menu == "REVIVAL TARGET SUBMENU":
+            options = [p.name for p in party if p.hp <= 0] + ["Back"]
+        elif cur_menu == "SEIZE TARGET SUBMENU":
+            options = [p.name for p in party if p != hero and p.potential_value > 0] + ["Back"]
+        elif cur_menu == "MANIPULATE TARGET SUBMENU":
+            options = [p.name for p in party] + ["Back"]
 
         if sub_row >= len(options):
             sub_row = 0
@@ -329,28 +370,30 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
             ty = menu_rect[1] + 15 + (i * 32)
             text_color = white
             if cur_menu == "MAGIC SUBMENU" and text != "Back":
-                cost = ENABLER_STATS.get(text, 0)
-                if hero.mp < cost: text_color = gray
-            
-            
+                cost = ENABLER_STATS[text]
+                if hero.mp < cost:
+                    text_color = gray
+                
+            if cur_menu == "SYNERGY SUBMENU" and text != "Back":
+                for m in SYNERGY_MOVES:
+                    if text == m.name:
+                        for p in party:
+                            if p.name == m.synergy_partner and (hero.synergy_bars < m.synergy_bars_required or p.synergy_bars < m.synergy_bars_required):
+                                text_color = gray
+
+            if i == sub_row and text_color != gray:
+                text_color = yellow
             display_name = text
             if cur_menu == "MAGIC SUBMENU" and text != "Back":
-                display_name = f"{text} ({ENABLER_STATS.get(text)} MP)"
+                display_name = f"{text} ({ENABLER_STATS[text]} MP)"
 
             virtual_screen.blit(font.render(display_name, True, text_color), (tx, ty))
-            if i == sub_row:
+            if i == sub_row and text_color != gray:
                 pygame.draw.polygon(virtual_screen, white, [(tx - 35, ty + 10), (tx - 20, ty + 17), (tx - 35, ty + 24)])
 
-
-
-
-
-
-
-            text_color = yellow if i == sub_row else white
-            virtual_screen.blit(font.render(text, True, text_color), (tx, ty))
             if i == sub_row:
                 pygame.draw.polygon(virtual_screen, white, [(tx - 35, ty + 10), (tx - 20, ty + 17), (tx - 35, ty + 24)])
+                
     box_width = 200
     scroll_rect = pygame.Rect(menu_rect[0] + 230, active_y, box_width, 25)
     
@@ -372,7 +415,7 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
 
 
 def main():
-    global scroll_x
+    global scroll_x, protect_used_this_turn
     pygame.init()
     internal_res = (800, 600)
     display_res = (1280, 720)
@@ -406,11 +449,11 @@ def main():
     enemy_attack_timer = 0
 
     cur_menu = "MAIN BATTLE MENU"
-    cur_col, cur_row, sub_row = 0, 0, 0 
-
+    cur_col, cur_row, sub_row = 0, 0, 0
+    synergy_options = []
     attack_options = []
-    is_runniung = True
-    while is_runniung:
+    is_running = True
+    while is_running:
         virtual_screen.fill((30, 30, 30))
         hero = party[active_hero_index]
 
@@ -423,16 +466,20 @@ def main():
         protect_options = [p.name for p in party if p != hero] + ["Back"]
 
         draw_individual_menus(virtual_screen, small_font, party, active_hero_index)
-        draw_battle_menu(virtual_screen, font, cur_col, cur_row, cur_menu, sub_row, enemy, protect_options, hero, attack_options, potential_options, magic_options)
+        draw_battle_menu(virtual_screen, font, cur_col, cur_row, cur_menu, sub_row, enemy, protect_options, hero, attack_options, potential_options, magic_options, synergy_options, party)
 
-        
+        if active_hero_index == 0 and not is_attacking and not enemy_is_attacking:
+            if protect_used_this_turn:
+                protect_used_this_turn = False
+                for p in party:
+                    p.is_protecting_target = None
 
         if party[active_hero_index].hp <= 0:
             active_hero_index = (active_hero_index + 1) % len(party)
 
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
-                is_runniung = False
+                is_running = False
 
             if event.type == pygame.VIDEORESIZE:
                 display_res = (event.w, event.h)
@@ -476,10 +523,65 @@ def main():
                             cur_menu = "MAGIC SUBMENU"
                             sub_row = 0
                         elif battle_menu[cur_col][cur_row] == "Protect Stance":
-                            cur_menu = "PROTECT SUBMENU"
+                            if not protect_used_this_turn:
+                                cur_menu = "PROTECT SUBMENU"
                         elif battle_menu[cur_col][cur_row] == "Potential Breach":
                             if hero.potential_value >= hero.max_potential_value:
                                 cur_menu = "POTENTIAL SUBMENU"
+                        elif battle_menu[cur_col][cur_row] == "Synergy Abilities":
+                            synergy_options = []
+                            for move in SYNERGY_MOVES:
+                                if hero.name == "Ethan" and move.name in ["Vicious Dash", "Explosive Impact"]:
+                                    synergy_options.append(move.name)
+                                elif hero.name == "Elena" and move.name in ["Vicious Dash", "Synchro Blast"]:
+                                    synergy_options.append(move.name)
+                                elif hero.name == "Evelyn" and move.name in ["Explosive Impact", "Synchro Blast"]:
+                                    synergy_options.append(move.name)
+
+                            synergy_options.append("Back")
+                            cur_menu = "SYNERGY SUBMENU"
+                            sub_row = 0
+
+                elif cur_menu == "SYNERGY SUBMENU":
+                    if event.key == pygame.K_UP:
+                        sub_row = (sub_row - 1) % len(synergy_options)
+                        cursor_sound.play()
+                    if event.key == pygame.K_DOWN:
+                        sub_row = (sub_row + 1) % len(synergy_options)
+                        cursor_sound.play()
+                    if event.key == pygame.K_SPACE:
+                        confirm_sound.play()
+                        move_name = synergy_options[sub_row]
+                        if move_name == "Back":
+                            cur_menu = "MAIN BATTLE MENU"
+                            cur_col, cur_row, sub_row = 0, 0, 0
+                        else:
+                            selected_move = None
+                            for m in SYNERGY_MOVES:
+                                if m.name in move_name:
+                                    selected_move = m
+
+                            partner = None
+                            for p in party:
+                                if p.name == selected_move.synergy_partner:
+                                    partner = p
+
+                            if(partner and hero.synergy_bars >= selected_move.synergy_bars_required and partner.synergy_bars >= selected_move.synergy_bars_required):
+                                hero.synergy_bars -= selected_move.synergy_bars_required
+                                partner.synergy_bars -= selected_move.synergy_bars_required
+                                enemy.take_damage(selected_move.damage, party)
+                                
+                                partner_name = selected_move.synergy_partner
+                                for p in [hero, partner]:   
+                                    if selected_move.perk_type in ["POTENTIAL_LEVEL_UP", "BOTH"]:
+                                        p.potential_level = min(3, p.potential_level + 1)
+                                    if selected_move.perk_type in ["ZERO_MP_COST", "BOTH"]:
+                                        p.zero_mp_cost = True
+                                
+                                is_attacking = True
+                                attack_timer = 40
+                                cur_menu = "MAIN BATTLE MENU"
+                                cur_col, cur_row, sub_row = 0, 0, 0
 
                 elif cur_menu == "POTENTIAL SUBMENU":
                     if event.key == pygame.K_UP:
@@ -492,19 +594,40 @@ def main():
                         confirm_sound.play()
                         if potential_options[sub_row] == "Back":
                             cur_menu = "MAIN BATTLE MENU"
+                            cur_col, cur_row, sub_row = 0, 0, 0
                         else:
                             current_potential_move = potential_options[sub_row]
                             hero.potential_value = 0
+                            hero.potential_level = max(1, hero.potential_level - 1)
                             if current_potential_move == "Soothing Gale":
                                 for p in party:
                                     p.heal(500)
                                 enemy_is_attacking = True
                                 enemy_attack_timer = 40
                                 cur_menu = "MAIN BATTLE MENU"
+                                cur_col, cur_row, sub_row = 0, 0, 0
+                            
+                            elif current_potential_move == "Potential Impart":
+                                for p in party: 
+                                    if p != hero: p.potential_value = p.max_potential_value
+                                enemy_is_attacking = True
+                                enemy_attack_timer = 40
+                                cur_menu = "MAIN BATTLE MENU"
+                                cur_col, cur_row, sub_row = 0, 0, 0
+
+                            elif current_potential_move == "full restore":
+                                for p in party:
+                                    p.hp = p.max_hp
+                                    p.mp = p.max_mp
+
+                                enemy_is_attacking = True
+                                enemy_attack_timer = 40
+                                cur_menu = "MAIN BATTLE MENU"
+                                cur_col, cur_row, sub_row = 0, 0, 0
+
                             else:
                                 is_attacking = True
                                 attack_timer = 40
-                                
                                 
                                 if current_potential_move == "Flurry Slash":
                                     enemy.take_damage(350, party)
@@ -521,6 +644,9 @@ def main():
                                     enemy.take_damage(1800, party)
                                 
                                 cur_menu = "MAIN BATTLE MENU"
+                                cur_col, cur_row, sub_row = 0, 0, 0
+
+
 
                 elif cur_menu == "PROTECT SUBMENU":
                     if event.key == pygame.K_UP:
@@ -534,13 +660,17 @@ def main():
                         choice = protect_options[sub_row]
                         if choice == "Back":
                                 cur_menu = "MAIN BATTLE MENU"
+                                cur_col, cur_row, sub_row = 0, 0, 0
                         else:
                             for p in party:
                                 if choice == p.name:
                                     hero.is_protecting_target = p
+                                    protect_used_this_turn = True
                                     break
-                            active_hero_index = (active_hero_index + 1) % len(party)
+                            enemy_is_attacking = True
+                            enemy_attack_timer = 40
                             cur_menu = "MAIN BATTLE MENU"
+                            cur_col, cur_row, sub_row = 0, 0, 0
 
 
                 elif cur_menu == "ATTACK SUBMENU":
@@ -554,11 +684,13 @@ def main():
                         confirm_sound.play()
                         if attack_options[sub_row] == "Back":
                             cur_menu = "MAIN BATTLE MENU"
-                        else:
+                            cur_col, cur_row, sub_row = 0, 0, 0
+                        elif attack_options[sub_row] == "Basic Attack":
                             enemy.take_damage(random.randint(100, 150), party)
                             is_attacking = True
                             attack_timer = 40
                             cur_menu = "MAIN BATTLE MENU"
+                            cur_col, cur_row, sub_row = 0, 0, 0
 
                 elif cur_menu == "MAGIC SUBMENU":
                     if event.key == pygame.K_UP:
@@ -572,12 +704,133 @@ def main():
                         confirm_sound.play()
                         if spell == "Back":
                             cur_menu = "MAIN BATTLE MENU"
-                        elif hero.mp >= ENABLER_STATS[spell]:
-                            hero.mp -= ENABLER_STATS[spell]
+                            cur_col, cur_row, sub_row = 0, 0, 0
+                        elif hero.mp >= ENABLER_STATS[spell] or hero.zero_mp_cost:
+                            if spell == "Potential Seize":
+                                cur_menu = "SEIZE TARGET SUBMENU"
+                            elif spell == "Healing":
+                                cur_menu = "HEALING TARGET SUBMENU"
+                            elif spell == "Revive" or spell == "Rebirth":
+                                cur_menu = "REVIVAL TARGET SUBMENU"
+                            elif spell == "Manipulate":
+                                cur_menu = "MANIPULATE TARGET SUBMENU"
+                            elif spell == "Strike":
+                                enemy.take_damage(600, party)
+                                cur_menu = "MAIN BATTLE MENU"
+                                cur_col, cur_row, sub_row = 0, 0, 0
+                                enemy_is_attacking = True
+                                enemy_attack_timer = 40
+
+                elif cur_menu == "HEALING TARGET SUBMENU":
+                    alive_allies = [p for p in party if p.hp > 0]
+                    target_options = [p.name for p in alive_allies] + ["Back"]
+                    if event.key == pygame.K_UP:
+                        sub_row = (sub_row - 1) % len(target_options)
+                        cursor_sound.play()
+                    elif event.key == pygame.K_DOWN:
+                        sub_row = (sub_row + 1) % len(target_options)
+                        cursor_sound.play()
+                    if event.key == pygame.K_SPACE:
+                        confirm_sound.play()
+                        choice = target_options[sub_row]
+                        if choice == "Back":
+                            cur_menu = "MAGIC SUBMENU"
+                            sub_row = 0
+                        else:
+                            target = alive_allies[sub_row]
+                            target.heal(random.randint(400, 600))
+                            hero.mp -= 0 if hero.zero_mp_cost else ENABLER_STATS["Healing"]
+                            hero.zero_mp_cost = False
                             cur_menu = "MAIN BATTLE MENU"
+                            cur_col, cur_row, sub_row = 0, 0, 0
                             enemy_is_attacking = True
                             enemy_attack_timer = 40
 
+                elif cur_menu == "REVIVAL TARGET SUBMENU":
+                    dead_allies = [p for p in party if p.hp <= 0]
+                    target_options = [p.name for p in dead_allies] + ["Back"]
+                    if event.key == pygame.K_UP:
+                        sub_row = (sub_row - 1) % len(target_options)
+                        cursor_sound.play()
+                    elif event.key == pygame.K_DOWN:
+                        sub_row = (sub_row + 1) % len(target_options)
+                        cursor_sound.play()
+                    if event.key == pygame.K_SPACE:
+                        confirm_sound.play()
+                        choice = target_options[sub_row]
+                        if choice == "Back":
+                            cur_menu = "MAGIC SUBMENU"
+                            sub_row = 0
+                        else:
+                            target = dead_allies[sub_row]
+                            if spell == "Revive":
+                                target.hp = int(target.max_hp * 0.3)
+                            elif spell == "Rebirth":
+                                target.hp = target.max_hp
+                            if not hero.zero_mp_cost:
+                                if spell == "Revive":
+                                    hero.mp -=  ENABLER_STATS["Revive"]
+                                elif spell == "Rebirth":
+                                    hero.mp -=  ENABLER_STATS["Rebirth"]
+                            hero.zero_mp_cost = False
+                            cur_menu = "MAIN BATTLE MENU"
+                            cur_col, cur_row, sub_row = 0, 0, 0
+                            enemy_is_attacking = True
+                            enemy_attack_timer = 40
+
+                elif cur_menu == "MANIPULATE TARGET SUBMENU":
+                    target_options = [p.name for p in party] + ["Back"]
+                    if event.key == pygame.K_UP:
+                        sub_row = (sub_row - 1) % len(target_options)
+                        cursor_sound.play()
+                    elif event.key == pygame.K_DOWN:
+                        sub_row = (sub_row + 1) % len(target_options)
+                        cursor_sound.play()
+                    if event.key == pygame.K_SPACE:
+                        confirm_sound.play()
+                        choice = target_options[sub_row]
+                        if choice == "Back":
+                            cur_menu = "MAGIC SUBMENU"
+                            sub_row = 0
+                        else:
+                            for p in party:
+                                if choice == p.name:
+                                    enemy.forced_target = p
+                            if not hero.zero_mp_cost:
+                                hero.mp -= ENABLER_STATS["Manipulate"]
+                            hero.zero_mp_cost = False
+                            cur_menu = "MAIN BATTLE MENU"
+                            cur_col, cur_row, sub_row = 0, 0, 0
+                            enemy_is_attacking = True
+                            enemy_attack_timer = 40
+
+                elif cur_menu == "SEIZE TARGET SUBMENU":
+                    seize_targets = [p for p in party if p != hero and p.potential_value > 0]
+                    target_options = [p.name for p in seize_targets] + ["Back"]
+                    if event.key == pygame.K_UP:
+                        sub_row = (sub_row - 1) % len(target_options)
+                        cursor_sound.play()
+                    elif event.key == pygame.K_DOWN:
+                        sub_row = (sub_row + 1) % len(target_options)
+                        cursor_sound.play()
+                    if event.key == pygame.K_SPACE:
+                        confirm_sound.play()
+                        if target_options[sub_row] == "Back":
+                            cur_menu = "MAGIC SUBMENU"
+                            sub_row = 0
+                        else:
+                            target = seize_targets[sub_row]
+                            hero.potential_value = min(hero.max_potential_value, hero.potential_value + target.potential_value)
+                            target.potential_value = 0
+                            if not hero.zero_mp_cost:
+                                hero.mp -= ENABLER_STATS["Potential Seize"]
+                            hero.zero_mp_cost = False
+                            cur_menu = "MAIN BATTLE MENU"
+                            cur_col, cur_row, sub_row = 0, 0, 0
+                            enemy_is_attacking = True
+                            enemy_attack_timer = 40
+
+                            
         if is_attacking:
             if attack_timer > 25: # first phase of the animation
                 hero.x -= 20
@@ -602,7 +855,11 @@ def main():
                 enemy.failed_block_attempt = False
                 living_heroes = [p for p in party if p.hp > 0]
                 if living_heroes:
-                    target_hero = random.choice(living_heroes)
+                    if enemy.forced_target and enemy.forced_target.hp > 0:
+                        target_hero = enemy.forced_target
+                        enemy.forced_target = None
+                    else:
+                        target_hero = random.choice(living_heroes)
 
             if enemy_attack_timer > 25: # First phase of the animation
                 enemy.x += 20
@@ -621,9 +878,6 @@ def main():
                 enemy_is_attacking = False
                 enemy.x, enemy.y = enemy.base_x, enemy.base_y
                 target_hero.take_damage(random.randint(100,150), party, attacker=enemy)
-                for p in party:
-                    p.is_protecting_target = None
-
                 active_hero_index = (active_hero_index + 1) % len(party)
 
         scaled_surface = pygame.transform.smoothscale(virtual_screen, display_res)
