@@ -10,7 +10,7 @@ orange = (255, 165, 0)
 green = (0, 255, 0)
 red = (255, 0, 0)
 
-menu_rect = (50, 420, 440, 150) #x, y, width, and height
+menu_rect = (50, 420, 440, 150) # x, y, width, and height
 battle_menu = [["Attack", "Magic", "Protect Stance"], ["Synergy Abilities", "Potential Breach"]]
 protect_used_this_turn = False
 current_hover_text = ""
@@ -32,11 +32,11 @@ DESCRIPTIONS = {
         "When enough synergy bars are collected, Synergy Abilities become available. "
         "The attacks involve a partner and grant special perks."
     ), 
-    "Basic Attack": "A normal physical strike. No cooldown. Uses no MP. ",
+    "Basic Attack": "A normal physical strike. No cooldown. ",
 
     "Counter": ( 
         "Ethan enters a stance that automatically blocks the next attack that targets him that turn. " 
-        "When Ethan successfully blocks with Counter, he immediately COUNTERS, dealing damage equal to two of his basic attacks. " 
+        "When Ethan successfully blocks with Counter, he immediately counters, dealing more than double the damage of the Basic Attack. " 
         "Has a cooldown of 3 turns." 
     ),         
     "Charge": (
@@ -45,20 +45,16 @@ DESCRIPTIONS = {
         "When using a charged attack, one Chi level is consumed." 
     ),          
     "Brute Force": (
-        "Unlocked once Elena has at least 1 Chi. " 
+        "Unlocked once Elena's Chi level is 1. " 
         "Consumes 1 Chi level. Deals more than double the damage of the Basic Attack." 
     ),
     "Heavy Barrage": (
-        "Unlocked once Elena has 2 Chi levels. " 
+        "Unlocked once Elena's Chi level is 2. " 
         "Consumes 1 Chi level. Deals more than double the damage of Brute Force." 
     ),   
     "Twin Cast": (
         "The next spell cast by any ally will be duplicated, with the duplicate costing " 
         "0 MP but only dealing half the damage of the first. Cooldown: 3 turns." 
-    ),
-    "Twin Cast": (
-        "Increases the damage of Evelyn's basic attacks for 3 turns. " 
-        "This only applies to Evelyn's basic attacks. Has a cooldown of 3 turns." 
     ),
     "Protect Stance": (
         "Any ally can enter this stance and choose one other ally to protect and gain synergy bars with. " 
@@ -125,22 +121,20 @@ ENABLER_STATS = {
     "Strike": 20
 }
 
-# The synergy logic needs to be revamped to fix hero being both hero and partner
-# The synergy ability option should be inaccessible and grayed out when none of the hero's requirements are met
 # The synergy ability option isn't being grayed out correctly 
 
 class SynergyAbility:
-    def __init__(self, name, partner, bars_required, perk_type, damage):
+    def __init__(self, name, heroes, bars_required, perk_type, damage):
         self.name = name
-        self.synergy_partner = partner
+        self.heroes = heroes
         self.perk_type = perk_type # Can be "POTENTIAL_LEVEL_UP", "ZERO_MP_COST", or "BOTH"
         self.damage = damage
         self.synergy_bars_required = bars_required
 
 SYNERGY_MOVES = [
-    SynergyAbility("Vicious Dash", "Elena", 3, "POTENTIAL_LEVEL_UP", 400),
-    SynergyAbility("Explosive Impact", "Evelyn", 3, "ZERO_MP_COST", 400),
-    SynergyAbility("Synchro Blast", "Evelyn", 4, "BOTH", 500)
+    SynergyAbility("Vicious Dash", ["Ethan", "Elena"], 3, "POTENTIAL_LEVEL_UP", 400),
+    SynergyAbility("Explosive Impact", ["Ethan", "Evelyn"], 3, "ZERO_MP_COST", 400),
+    SynergyAbility("Synchro Blast", ["Elena", "Evelyn"], 4, "BOTH", 500)
 ]
 
 class Characters:
@@ -162,6 +156,8 @@ class Characters:
         self.is_protecting_target = None
         self.forced_target = None
         self.chi_level = 0
+        self.is_counter_active = False 
+        self.is_twin_cast_active = False
         self.cooldowns = {"Counter": 0, "Twin Cast": 0, "Charge": 0}
         self.image = pygame.image.load(image_path).convert_alpha()
         self.image = pygame.transform.scale(self.image, (150, 200))
@@ -180,7 +176,10 @@ class Characters:
             self.hp = min(self.max_hp, self.hp + amount)
 
     def take_damage(self, amount, party, attacker=None):
-        if not self.is_enemy and self.cooldowns["Counter"] > 0:
+        if not self.is_enemy and self.is_counter_active:
+            self.is_counter_active = False
+            if attacker and attacker.is_enemy:
+                attacker.hp = max(0, attacker.hp - random.randint(200, 250))
             return # Damage is nullified
 
         protector = None
@@ -278,17 +277,17 @@ def draw_individual_menus(virtual_screen, small_font, party, active_hero_index):
 def get_unique_abilities(hero):
     abilities = ["Basic Attack"]
     if hero.name == "Ethan":
-        abilities += ["Counter"]
+        abilities.append("Counter")
 
     elif hero.name == "Elena":
-        abilities += ["Charge"]
+        abilities.append("Charge")
         if hero.chi_level == 1:
             abilities.append("Brute Force")
         if hero.chi_level == 2:
             abilities.append("Heavy Barrage")
 
     elif hero.name == "Evelyn":
-        abilities += ["Twin Cast", "Twin Cast"]
+        abilities.append("Twin Cast")
     
     abilities.append("Back")
     return abilities
@@ -324,12 +323,21 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
                 if text == "Potential Breach" and hero.potential_value < hero.max_potential_value:
                     text_color = gray
                 elif text == "Synergy Abilities":
-                    if hero.synergy_bars < 3:
-                        for p in party:
-                            if p != hero and p.synergy_bars < 3:
+                    for move in SYNERGY_MOVES:
+                        if move.heroes[0] == hero.name or move.heroes[1] == hero.name: # Checking for only the current hero's synergy abilities
+                            partner_name = move.heroes[0] if move.heroes[1] == hero.name else move.heroes[1]
+                            partner = None
+                            for p in party:
+                                if p.name == partner_name:
+                                    partner = p
+                                    break
+                            if partner and partner.hp > 0 and hero.synergy_bars >= move.synergy_bars_required and partner.synergy_bars >= move.synergy_bars_required: # Found a valid move
+                                break
+                            else:
                                 text_color = gray
                 elif text == "Protect Stance" and protect_used_this_turn:
                     text_color = gray
+                    
                 if c == col and r == row and text_color != gray:
                     text_color = yellow
                 
@@ -340,7 +348,7 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
                     pointer_y = (ty + 10)
                     pygame.draw.polygon(virtual_screen, white, [(pointer_x, pointer_y), (pointer_x + 15, pointer_y + 7), (pointer_x, pointer_y + 14)])
 
-    elif cur_menu in ["ATTACK SUBMENU", "PROTECT SUBMENU", "POTENTIAL SUBMENU", "MAGIC SUBMENU", "SYNERGY SUBMENU", "HEALING TARGET SUBMENU", "MANIPULATE TARGET SUBMENU", "SEIZE TARGET SUBMENU", "REVIVAL TARGET SUBMENU"]:
+    elif cur_menu in ["ATTACK SUBMENU", "PROTECT SUBMENU", "POTENTIAL SUBMENU", "MAGIC SUBMENU", "SYNERGY SUBMENU", "HEALING TARGET SUBMENU", "MANIPULATE TARGET SUBMENU", "SEIZE TARGET SUBMENU", "REVIVAL TARGET SUBMENU", "TWIN CAST SUBMENU"]:
         if cur_menu == "ATTACK SUBMENU": 
             options = attack_options
         elif cur_menu == "PROTECT SUBMENU":
@@ -359,7 +367,8 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
             options = [p.name for p in party if p != hero and p.potential_value > 0] + ["Back"]
         elif cur_menu == "MANIPULATE TARGET SUBMENU":
             options = [p.name for p in party] + ["Back"]
-
+        elif cur_menu == "TWIN CAST SUBMENU":
+            options = [p.name for p in party if p.hp > 0] + ["Back"]
         if sub_row >= len(options):
             sub_row = 0
 
@@ -373,13 +382,26 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
                 cost = ENABLER_STATS[text]
                 if hero.mp < cost:
                     text_color = gray
-                
-            if cur_menu == "SYNERGY SUBMENU" and text != "Back":
-                for m in SYNERGY_MOVES:
-                    if text == m.name:
+
+            elif cur_menu == "ATTACK SUBMENU":
+                if text == "Counter" and hero.cooldowns["Counter"] > 0:
+                    text_color = gray
+                if text == "Charge" and (hero.chi_level > 2 or hero.cooldowns["Charge"] > 0):
+                    text_color = gray
+                if text == "Twin Cast" and hero.cooldowns["Twin Cast"] > 0:
+                    text_color = gray
+
+            elif cur_menu == "SYNERGY SUBMENU" and text != "Back":
+                for move in SYNERGY_MOVES:
+                    if text == move.name:
+                        partner_name = move.heroes[0] if move.heroes[1] == hero.name else move.heroes[1]
+                        partner = None
                         for p in party:
-                            if p.name == m.synergy_partner and (hero.synergy_bars < m.synergy_bars_required or p.synergy_bars < m.synergy_bars_required):
-                                text_color = gray
+                            if p.name == partner_name:
+                                partner = p
+                                break
+                        if not partner or partner.hp <= 0 or hero.synergy_bars < move.synergy_bars_required or partner.synergy_bars < move.synergy_bars_required:
+                            text_color = gray
 
             if i == sub_row and text_color != gray:
                 text_color = yellow
@@ -529,15 +551,7 @@ def main():
                             if hero.potential_value >= hero.max_potential_value:
                                 cur_menu = "POTENTIAL SUBMENU"
                         elif battle_menu[cur_col][cur_row] == "Synergy Abilities":
-                            synergy_options = []
-                            for move in SYNERGY_MOVES:
-                                if hero.name == "Ethan" and move.name in ["Vicious Dash", "Explosive Impact"]:
-                                    synergy_options.append(move.name)
-                                elif hero.name == "Elena" and move.name in ["Vicious Dash", "Synchro Blast"]:
-                                    synergy_options.append(move.name)
-                                elif hero.name == "Evelyn" and move.name in ["Explosive Impact", "Synchro Blast"]:
-                                    synergy_options.append(move.name)
-
+                            synergy_options = [move.name for move in SYNERGY_MOVES if hero.name in move.heroes]
                             synergy_options.append("Back")
                             cur_menu = "SYNERGY SUBMENU"
                             sub_row = 0
@@ -557,21 +571,23 @@ def main():
                             cur_col, cur_row, sub_row = 0, 0, 0
                         else:
                             selected_move = None
-                            for m in SYNERGY_MOVES:
-                                if m.name in move_name:
-                                    selected_move = m
+                            for move in SYNERGY_MOVES:
+                                if move.name == move_name:
+                                    selected_move = move
+                                    break
 
+                            partner_name = selected_move.heroes[0] if selected_move.heroes[1] == hero.name else selected_move.heroes[1]
                             partner = None
                             for p in party:
-                                if p.name == selected_move.synergy_partner:
+                                if p.name == partner_name:
                                     partner = p
+                                    break
 
                             if(partner and hero.synergy_bars >= selected_move.synergy_bars_required and partner.synergy_bars >= selected_move.synergy_bars_required):
                                 hero.synergy_bars -= selected_move.synergy_bars_required
                                 partner.synergy_bars -= selected_move.synergy_bars_required
                                 enemy.take_damage(selected_move.damage, party)
-                                
-                                partner_name = selected_move.synergy_partner
+
                                 for p in [hero, partner]:   
                                     if selected_move.perk_type in ["POTENTIAL_LEVEL_UP", "BOTH"]:
                                         p.potential_level = min(3, p.potential_level + 1)
@@ -685,12 +701,74 @@ def main():
                         if attack_options[sub_row] == "Back":
                             cur_menu = "MAIN BATTLE MENU"
                             cur_col, cur_row, sub_row = 0, 0, 0
+
                         elif attack_options[sub_row] == "Basic Attack":
-                            enemy.take_damage(random.randint(100, 150), party)
+                            enemy.take_damage(random.randint(50, 100), party)
                             is_attacking = True
                             attack_timer = 40
                             cur_menu = "MAIN BATTLE MENU"
                             cur_col, cur_row, sub_row = 0, 0, 0
+
+                        elif attack_options[sub_row] == "Counter":
+                            if hero.cooldowns["Counter"] <= 0:
+                                hero.cooldowns["Counter"] = 4
+                                hero.is_counter_active = True
+                                enemy_is_attacking = True
+                                enemy_attack_timer = 40
+                                cur_menu = "MAIN BATTLE MENU"
+                                cur_col, cur_row, sub_row = 0, 0, 0
+
+                        elif attack_options[sub_row] == "Charge":
+                            if hero.chi_level > 2 or hero.cooldowns["Charge"] <= 0:
+                                hero.chi_level += 1
+                                hero.cooldowns["Charge"] = 2
+                                enemy_is_attacking = True
+                                enemy_attack_timer = 40
+                                cur_menu = "MAIN BATTLE MENU"
+                                cur_col, cur_row, sub_row = 0, 0, 0
+                        elif attack_options[sub_row] == "Brute Force":
+                            enemy.take_damage(random.randint(150, 200), party)
+                            hero.chi_level -= 1
+                            is_attacking = True
+                            attack_timer = 40
+                            cur_menu = "MAIN BATTLE MENU"
+                            cur_col, cur_row, sub_row = 0, 0, 0
+                        elif attack_options[sub_row] == "Heavy Barrage":
+                            enemy.take_damage(random.randint(350, 400), party)
+                            hero.chi_level -= 1
+                            is_attacking = True
+                            attack_timer = 40
+                            cur_menu = "MAIN BATTLE MENU"
+                            cur_col, cur_row, sub_row = 0, 0, 0
+
+                        elif attack_options[sub_row] == "Twin Cast":
+                            if hero.cooldowns["Twin Cast"] <= 0:
+                                cur_menu = "TWIN CAST SUBMENU"
+                                sub_row = 0
+
+                elif cur_menu == "TWIN CAST SUBMENU":
+                    alive_allies = [p for p in party if p.hp > 0]
+                    target_options = [p.name for p in alive_allies] + ["Back"]
+                    if event.key == pygame.K_UP:
+                        sub_row = (sub_row - 1) % len(target_options)
+                        cursor_sound.play()
+                    if event.key == pygame.K_DOWN:
+                        sub_row = (sub_row + 1) % len(target_options)
+                        cursor_sound.play()
+                    if event.key == pygame.K_SPACE:
+                        confirm_sound.play()
+                        choice = target_options[sub_row]
+                        if choice == "Back":
+                            cur_menu = "ATTACK SUBMENU"
+                            sub_row = 0
+                        else:
+                            target = alive_allies[sub_row]
+                            target.is_twin_cast_active = True
+                            hero.cooldowns["Twin Cast"] = 4
+                            cur_menu = "MAIN BATTLE MENU"
+                            cur_col, cur_row, sub_row = 0, 0, 0
+                            enemy_is_attacking = True
+                            enemy_attack_timer = 40
 
                 elif cur_menu == "MAGIC SUBMENU":
                     if event.key == pygame.K_UP:
@@ -716,6 +794,12 @@ def main():
                                 cur_menu = "MANIPULATE TARGET SUBMENU"
                             elif spell == "Strike":
                                 enemy.take_damage(600, party)
+                                if hero.is_twin_cast_active:
+                                    enemy.take_damage(300, party)
+                                    hero.is_twin_cast_active = False
+                                if not hero.zero_mp_cost:
+                                    hero.mp -= ENABLER_STATS["Strike"]
+                                hero.zero_mp_cost = False
                                 cur_menu = "MAIN BATTLE MENU"
                                 cur_col, cur_row, sub_row = 0, 0, 0
                                 enemy_is_attacking = True
@@ -879,6 +963,9 @@ def main():
                 enemy.x, enemy.y = enemy.base_x, enemy.base_y
                 target_hero.take_damage(random.randint(100,150), party, attacker=enemy)
                 active_hero_index = (active_hero_index + 1) % len(party)
+                for move_key in hero.cooldowns:
+                    if hero.cooldowns[move_key] > 0:
+                        hero.cooldowns[move_key] -= 1
 
         scaled_surface = pygame.transform.smoothscale(virtual_screen, display_res)
         window.blit(scaled_surface, (0, 0))
