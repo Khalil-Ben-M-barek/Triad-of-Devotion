@@ -2,6 +2,8 @@ import pygame
 import sys
 import random
 
+# Need to fix block key
+
 white = (255, 255, 255)
 blue = (0, 0, 150)
 gray = (100, 100, 100)
@@ -80,9 +82,9 @@ DESCRIPTIONS = {
     
     "Potential Impart": "Evelyn's level 2 Potential Breach. Completely fills the other two allies' Potential gauges.",
 
-    "full restore": "Evelyn's level 3 Potential Breach. Fully restores the HP and MP of the entire party.",
+    "Full Restore": "Evelyn's level 3 Potential Breach. Fully restores the HP and MP of the entire party.",
 
-    "Vicious Dash": "For Ethan and Elena. Requires 3 Synergy bars. Deals moderate damage and revives the potential level of the characters who performed it.",
+    "Vicious Dash": "For Ethan and Elena. Requires 3 Synergy bars. Deals moderate damage and raises the potential level of the characters who performed it.",
 
     "Explosive Impact": "For Ethan and Evelyn. Requires 3 Synergy bars. Deals moderate damage and grants unpotentialed MP for the next spell of each character who performed it.",
 
@@ -109,7 +111,7 @@ DESCRIPTIONS = {
 POTENTIAL_MOVES = {
     "Ethan": {1: "Flurry Slash", 2: "Heavenly Descent", 3: "Final Blow"},
     "Elena": {1: "Spinning Kick", 2: "Tidal Onslaught", 3: "Celestial Tempest"},
-    "Evelyn": {1: "Soothing Gale", 2: "Potential Impart", 3: "full restore"}
+    "Evelyn": {1: "Soothing Gale", 2: "Potential Impart", 3: "Full Restore"}
 }
 
 ENABLER_STATS = {
@@ -120,8 +122,6 @@ ENABLER_STATS = {
     "Healing": 9,
     "Strike": 20
 }
-
-# The synergy ability option isn't being grayed out correctly 
 
 class SynergyAbility:
     def __init__(self, name, heroes, bars_required, perk_type, damage):
@@ -159,13 +159,16 @@ class Characters:
         self.is_counter_active = False 
         self.is_twin_cast_active = False
         self.cooldowns = {"Counter": 0, "Twin Cast": 0, "Charge": 0}
-        self.image = pygame.image.load(image_path).convert_alpha()
-        self.image = pygame.transform.scale(self.image, (150, 200))
+        try:
+            self.image = pygame.image.load(image_path).convert_alpha()
+            self.image = pygame.transform.scale(self.image, (150, 200))
+        except:
+            self.image = pygame.Surface((150, 200))
+            self.image.fill((80, 80, 120))
         self.is_attacking = False
         self.attack_timer = 0
         self.last_attack_blocked = False
         self.failed_block_attempt = False
-
         if name == "Ethan": self.enabler = ["Potential Seize", "Strike"]
         elif name == "Elena": self.enabler = ["Manipulate", "Revive"]
         elif name == "Evelyn": self.enabler = ["Rebirth", "Healing"]
@@ -259,20 +262,17 @@ def draw_individual_menus(virtual_screen, small_font, party, active_hero_index):
             
         potential_x, potential_y = box_x + 75, box_y + 55
         potential_is_full = hero.potential_value >= hero.max_potential_value
-        potential_text = "POTENTIAL BREACH" if potential_is_full else "Potential"
         potential_color = orange if hero.potential_value >= hero.max_potential_value else white
         potential_fill_width = (hero.potential_value / hero.max_potential_value) * 100
         pygame.draw.rect(virtual_screen, (80, 80, 80), (potential_x, potential_y, 100, 15))
         pygame.draw.rect(virtual_screen, potential_color, (potential_x, potential_y, potential_fill_width, 15))
         pygame.draw.rect(virtual_screen, white, (potential_x, potential_y, 100, 15), 1) # Border
+        potential_text = "Potential Breach" if potential_is_full else "Potential"
         virtual_screen.blit(small_font.render(potential_text, True, potential_color), (potential_x, potential_y - 20))
 
         for lvl in range(3):
             potential_bar_color = yellow if hero.potential_level > lvl else (50, 50, 50)
             pygame.draw.rect(virtual_screen, potential_bar_color, (potential_x + 105 + (lvl * 6), potential_y, 3, 15))
-
-
-
 
 def get_unique_abilities(hero):
     abilities = ["Basic Attack"]
@@ -332,6 +332,7 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
                                     partner = p
                                     break
                             if partner and partner.hp > 0 and hero.synergy_bars >= move.synergy_bars_required and partner.synergy_bars >= move.synergy_bars_required: # Found a valid move
+                                text_color = white
                                 break
                             else:
                                 text_color = gray
@@ -380,7 +381,7 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
             text_color = white
             if cur_menu == "MAGIC SUBMENU" and text != "Back":
                 cost = ENABLER_STATS[text]
-                if hero.mp < cost:
+                if hero.mp < cost and not hero.zero_mp_cost:
                     text_color = gray
 
             elif cur_menu == "ATTACK SUBMENU":
@@ -435,6 +436,172 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
         if (scroll_x + text_surface.get_width()) < 0:
             scroll_x = box_width
 
+def run_enabler_menu(virtual_screen, window, display_res, font, small_font, party, cursor_sound, confirm_sound):
+    is_equipping = True
+    available_enabler = list(ENABLER_STATS.keys())
+    hero_index = 0
+    cursor_index = 0
+    MAX_ENABLER_SLOTS = 2
+    equipped_x, equipped_y = 200, 120
+    slot_x, slot_y = 140, 160
+    slot_w, slot_h = 110, 240
+    list_x, list_y = 10, 410
+    line_h = 28
+    visible_count = 10
+    desc_x, desc_y, desc_w, desc_h = 420, 440, 340, 120
+
+    while is_equipping:
+        virtual_screen.fill((0, 0, 50))
+        hero = party[hero_index]
+        title_text = font.render("ENABLER EQUIP SETUP", True, yellow)
+        instructions = small_font.render("LEFT/RIGHT: Change Hero | UP/DOWN: Select Enabler | SPACE: Toggle Equip | ENTER: Start Battle", True, (200, 200, 200))
+        virtual_screen.blit(title_text, (20, 20))
+        virtual_screen.blit(instructions, (20, 50))
+        hero_text = font.render(f"Hero: < {hero.name} >", True, (0, 255, 255))
+        virtual_screen.blit(hero_text, (20, 100))
+        virtual_screen.blit(hero.image, (300, 190))
+
+        pygame.draw.rect(virtual_screen, (22 , 22, 40), (10, 140, 260, 90))
+        pygame.draw.rect(virtual_screen, (180, 180, 180), (10, 140, 260, 90), 1)
+        virtual_screen.blit(small_font.render("Equipped Enabler:", True, orange), (slot_x - 50, slot_y - 15))
+
+        pygame.draw.rect(virtual_screen, (22,22,40), (8, 375, 281, 172))
+        pygame.draw.rect(virtual_screen, (180, 180, 180), (8, 375, 281, 206), 1)
+        virtual_screen.blit(small_font.render("Available Enabler:", True, orange), (slot_x - 50, slot_y + 220))
+        virtual_screen.blit(small_font.render("MP:", True, orange), (slot_x + 117, slot_y + 220))
+
+        for i in range(MAX_ENABLER_SLOTS):
+            y = slot_y + (i * 30)
+            text = hero.enabler[i] if i < len(hero.enabler) else "Empty"
+            virtual_screen.blit(small_font.render(f"{i+1}. {text}", True, (220, 220, 220)), (slot_x - 50, y + 6))
+
+        if len(available_enabler) == 0:
+            cursor_index = 0
+        else:
+            cursor_index = max(0, min(cursor_index, len(available_enabler)-1))
+        top_index = max(0, min(cursor_index - visible_count//2, max(0, len(available_enabler)-visible_count)))
+
+        for index in range(top_index, min(len(available_enabler), top_index + visible_count)):
+            enabler = available_enabler[index]
+            y = list_y + (index - top_index) * line_h
+            is_cursor = (index == cursor_index)
+
+            owner = None
+            for p in party:
+                if enabler in p.enabler:
+                    owner = p
+            
+            if owner is None:
+                color = white
+                status_text = "(Available)"
+            elif owner == hero:
+                color = (100, 255, 140)  # Equipped by this hero
+                status_text = "(Equipped)"
+            else:
+                color = (160,160,160)  # Equipped by another hero
+                status_text = f"(In use: {owner.name})"
+
+            bg = (22,22,40) if not is_cursor else (40,40,80) # Most of the menu color
+            pygame.draw.rect(virtual_screen, bg, (list_x, y, 278, line_h))
+            info = ENABLER_STATS[enabler]
+            name_text = small_font.render(enabler, True, color)
+            info_text = small_font.render(f"{info}", True, white)
+            virtual_screen.blit(name_text, (list_x + 8, y + 4))
+            virtual_screen.blit(info_text, (list_x + 250, y + 4))
+            if is_cursor:
+                pygame.draw.polygon(virtual_screen, white, [(list_x - 15, y + 6), (list_x - 5, y + 14), (list_x - 15, y + 22)])
+           
+            eq_text = small_font.render(status_text, True, green)
+            virtual_screen.blit(eq_text, (list_x + 150, y + 4))
+        
+        pygame.draw.rect(virtual_screen, (22,22,40), (desc_x, desc_y - 20, desc_w - 50, desc_h + 50))
+        pygame.draw.rect(virtual_screen, (200,200,200), (desc_x, desc_y - 20, desc_w - 50, desc_h + 50), 1)
+
+        if available_enabler:
+            current_enabler = available_enabler[cursor_index]
+            desc = DESCRIPTIONS[current_enabler]
+            words = desc.split()
+            lines = []
+            cur_line = ""
+            max_chars_per_line = 42
+            for w in words:
+                if len(cur_line) + len(w) + 1 <= max_chars_per_line:
+                    cur_line = (cur_line + " " + w).strip()
+                else:
+                    lines.append(cur_line)
+                    cur_line = w
+            if cur_line:
+                lines.append(cur_line)
+            virtual_screen.blit(small_font.render(f"{current_enabler}:", True, white), (desc_x + 8, desc_y + 8))
+            for i, ln in enumerate(lines[:6]): # Limit just in case
+                virtual_screen.blit(small_font.render(ln, True, (220,220,220)), (desc_x + 8, desc_y + 36 + i*18))
+
+        for event in pygame.event.get():
+            if event.type == pygame.QUIT:
+                pygame.quit()
+                exit()
+            if event.type == pygame.VIDEORESIZE:
+                display_res = (event.w, event.h)
+                window = pygame.display.set_mode(display_res, pygame.RESIZABLE)
+            if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_LEFT:
+                    hero_index = (hero_index - 1) % len(party)
+                    cursor_index = 0
+                    if cursor_sound:
+                        cursor_sound.play()
+                elif event.key == pygame.K_RIGHT:
+                    hero_index = (hero_index + 1) % len(party)
+                    cursor_index = 0
+                    if cursor_sound:
+                        cursor_sound.play()
+                elif event.key == pygame.K_UP:
+                    cursor_index = (cursor_index - 1) % len(available_enabler)
+                    if cursor_sound:
+                        cursor_sound.play()
+                elif event.key == pygame.K_DOWN:
+                    cursor_index = (cursor_index + 1) % len(available_enabler)
+                    if cursor_sound:
+                        cursor_sound.play()
+                elif event.key == pygame.K_SPACE:
+                    if confirm_sound:
+                        confirm_sound.play()
+                    selected_enabler = available_enabler[cursor_index]
+                    if selected_enabler in hero.enabler:
+                        hero.enabler.remove(selected_enabler)
+                    elif len(hero.enabler) < MAX_ENABLER_SLOTS:
+                        for p in party:
+                            if selected_enabler in p.enabler:
+                                p.enabler.remove(selected_enabler)
+                        hero.enabler.append(selected_enabler)
+                elif event.key == pygame.K_RETURN:
+                    is_equipping = False
+                    if confirm_sound:
+                        confirm_sound.play()
+
+        scaled_surface = pygame.transform.scale(virtual_screen, display_res)
+        window.blit(scaled_surface, (0, 0))
+        pygame.display.flip()
+
+def reset_battle(party, enemy):
+    global protect_used_this_turn
+
+    for hero in party:
+        hero.hp = hero.max_hp
+        hero.mp = hero.max_mp
+        hero.potential_value = 0
+        hero.potential_level = 1
+        hero.synergy_bars = 0
+        hero.zero_mp_cost = False
+        hero.chi_level = 0
+        hero.is_protecting_target = None
+        hero.is_counter_active = False
+        hero.is_twin_cast_active = False
+        hero.cooldowns = {"Counter": 0, "Twin Cast": 0, "Charge": 0}
+
+    enemy.hp = enemy.max_hp
+    enemy.forced_target = None
+
+    protect_used_this_turn = False
 
 def main():
     global scroll_x, protect_used_this_turn
@@ -447,12 +614,7 @@ def main():
     clock = pygame.time.Clock()
     font = pygame.font.SysFont("Arial", 22)
     small_font = pygame.font.SysFont("Arial", 16)
-    
-    pygame.mixer.init()
-    music = pygame.mixer.Sound("battle_theme.mp3")
-    music.play(-1)
-    cursor_sound = pygame.mixer.Sound("cursor.mp3")
-    confirm_sound = pygame.mixer.Sound("confirm.mp3")
+    pygame.display.set_caption("Triad of Devotion")
 
     protect_options = []
     party = [
@@ -461,7 +623,7 @@ def main():
         Characters("Evelyn", 1000, 50, 650, 100, "evelyn.png")
     ]
 
-    enemy = Characters("boss", 10000, 0, 150, 50, "boss.png", is_enemy=True)
+    enemy = Characters("Boss", 10000, 0, 150, 50, "boss.png", is_enemy=True)
     active_hero_index = 0
     target_hero = None
 
@@ -474,6 +636,24 @@ def main():
     cur_col, cur_row, sub_row = 0, 0, 0
     synergy_options = []
     attack_options = []
+
+    pygame.mixer.init()
+    try:
+        cursor_sound = pygame.mixer.Sound("cursor.mp3")
+    except:
+        cursor_sound = None
+    try:
+        confirm_sound = pygame.mixer.Sound("confirm.mp3")
+    except:
+        confirm_sound = None
+
+    run_enabler_menu(virtual_screen, window, display_res, font, small_font, party, cursor_sound, confirm_sound)
+    try:
+        music = pygame.mixer.Sound("battle_theme.mp3")
+        music.play(-1)
+    except:
+        music = None
+
     is_running = True
     while is_running:
         virtual_screen.fill((30, 30, 30))
@@ -508,7 +688,7 @@ def main():
                 window = pygame.display.set_mode(display_res, pygame.RESIZABLE)
 
             if event.type == pygame.KEYDOWN:
-                scroll_x = 200 # to reset scroll when any key is pressed
+                scroll_x = 200 # To reset scroll when any key is pressed
 
                 if 15 < enemy_attack_timer < 25 and enemy_is_attacking:
                     key_pressed = pygame.key.name(event.key).lower()
@@ -516,7 +696,8 @@ def main():
                     if not enemy.failed_block_attempt and not enemy.last_attack_blocked:
                         if key_pressed == target_initial:
                             enemy.last_attack_blocked = True
-                            confirm_sound.play()
+                            if confirm_sound:
+                                confirm_sound.play()
                         else:
                             enemy.failed_block_attempt= True
 
@@ -524,24 +705,29 @@ def main():
 
                     if event.key == pygame.K_UP:
                         cur_row = (cur_row - 1) % len(battle_menu[cur_col])
-                        cursor_sound.play()
-                    if event.key == pygame.K_DOWN:
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_DOWN:
                         cur_row = (cur_row + 1) % len(battle_menu[cur_col])
-                        cursor_sound.play()
-                    if event.key == pygame.K_RIGHT:
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_RIGHT:
                         cur_col = (cur_col + 1) % 2
-                        cursor_sound.play()
-                    if event.key == pygame.K_LEFT:
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_LEFT:
                         cur_col = (cur_col - 1) % 2
-                        cursor_sound.play()
-                    if event.key == pygame.K_SPACE and not is_attacking and not enemy_is_attacking:
-                        confirm_sound.play()
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_SPACE and not is_attacking and not enemy_is_attacking:
+                        if confirm_sound:
+                            confirm_sound.play()
                         sub_row = 0 
                         scroll_x = 200
                         if battle_menu[cur_col][cur_row] == "Attack":
                             attack_options = get_unique_abilities(hero)
                             cur_menu = "ATTACK SUBMENU"
-                        if battle_menu[cur_col][cur_row] == "Magic":
+                        elif battle_menu[cur_col][cur_row] == "Magic":
                             cur_menu = "MAGIC SUBMENU"
                             sub_row = 0
                         elif battle_menu[cur_col][cur_row] == "Protect Stance":
@@ -551,20 +737,25 @@ def main():
                             if hero.potential_value >= hero.max_potential_value:
                                 cur_menu = "POTENTIAL SUBMENU"
                         elif battle_menu[cur_col][cur_row] == "Synergy Abilities":
-                            synergy_options = [move.name for move in SYNERGY_MOVES if hero.name in move.heroes]
-                            synergy_options.append("Back")
-                            cur_menu = "SYNERGY SUBMENU"
-                            sub_row = 0
+                            # If any move is available/satisfies the conditions
+                            if any(m for m in SYNERGY_MOVES if hero.name in m.heroes and all(p.synergy_bars >= m.synergy_bars_required for p in party if p.name in m.heroes)):
+                                synergy_options = [move.name for move in SYNERGY_MOVES if hero.name in move.heroes]
+                                synergy_options.append("Back")
+                                cur_menu = "SYNERGY SUBMENU"
+                                sub_row = 0
 
                 elif cur_menu == "SYNERGY SUBMENU":
                     if event.key == pygame.K_UP:
                         sub_row = (sub_row - 1) % len(synergy_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_DOWN:
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_DOWN:
                         sub_row = (sub_row + 1) % len(synergy_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_SPACE:
-                        confirm_sound.play()
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_SPACE:
+                        if confirm_sound:
+                            confirm_sound.play()
                         move_name = synergy_options[sub_row]
                         if move_name == "Back":
                             cur_menu = "MAIN BATTLE MENU"
@@ -602,12 +793,15 @@ def main():
                 elif cur_menu == "POTENTIAL SUBMENU":
                     if event.key == pygame.K_UP:
                         sub_row = (sub_row - 1) % len(potential_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_DOWN:
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_DOWN:
                         sub_row = (sub_row + 1) % len(potential_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_SPACE:
-                        confirm_sound.play()
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_SPACE:
+                        if confirm_sound:
+                            confirm_sound.play()
                         if potential_options[sub_row] == "Back":
                             cur_menu = "MAIN BATTLE MENU"
                             cur_col, cur_row, sub_row = 0, 0, 0
@@ -631,7 +825,7 @@ def main():
                                 cur_menu = "MAIN BATTLE MENU"
                                 cur_col, cur_row, sub_row = 0, 0, 0
 
-                            elif current_potential_move == "full restore":
+                            elif current_potential_move == "Full Restore":
                                 for p in party:
                                     p.hp = p.max_hp
                                     p.mp = p.max_mp
@@ -667,12 +861,15 @@ def main():
                 elif cur_menu == "PROTECT SUBMENU":
                     if event.key == pygame.K_UP:
                         sub_row = (sub_row - 1) % len(protect_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_DOWN:
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_DOWN:
                         sub_row = (sub_row + 1) % len(protect_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_SPACE and not is_attacking and not enemy_is_attacking:
-                        confirm_sound.play()
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_SPACE and not is_attacking and not enemy_is_attacking:
+                        if confirm_sound:
+                            confirm_sound.play()
                         choice = protect_options[sub_row]
                         if choice == "Back":
                                 cur_menu = "MAIN BATTLE MENU"
@@ -692,12 +889,15 @@ def main():
                 elif cur_menu == "ATTACK SUBMENU":
                     if event.key == pygame.K_UP:
                         sub_row = (sub_row - 1) % len(attack_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_DOWN:
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_DOWN:
                         sub_row = (sub_row + 1) % len(attack_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_SPACE and not is_attacking and not enemy_is_attacking:
-                        confirm_sound.play()
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_SPACE and not is_attacking and not enemy_is_attacking:
+                        if confirm_sound:
+                            confirm_sound.play()
                         if attack_options[sub_row] == "Back":
                             cur_menu = "MAIN BATTLE MENU"
                             cur_col, cur_row, sub_row = 0, 0, 0
@@ -751,12 +951,15 @@ def main():
                     target_options = [p.name for p in alive_allies] + ["Back"]
                     if event.key == pygame.K_UP:
                         sub_row = (sub_row - 1) % len(target_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_DOWN:
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_DOWN:
                         sub_row = (sub_row + 1) % len(target_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_SPACE:
-                        confirm_sound.play()
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_SPACE:
+                        if confirm_sound:
+                            confirm_sound.play()
                         choice = target_options[sub_row]
                         if choice == "Back":
                             cur_menu = "ATTACK SUBMENU"
@@ -773,13 +976,16 @@ def main():
                 elif cur_menu == "MAGIC SUBMENU":
                     if event.key == pygame.K_UP:
                         sub_row = (sub_row - 1) % len(magic_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_DOWN:
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_DOWN:
                         sub_row = (sub_row + 1) % len(magic_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_SPACE:
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_SPACE:
                         spell = magic_options[sub_row]
-                        confirm_sound.play()
+                        if confirm_sound:
+                            confirm_sound.play()
                         if spell == "Back":
                             cur_menu = "MAIN BATTLE MENU"
                             cur_col, cur_row, sub_row = 0, 0, 0
@@ -810,12 +1016,15 @@ def main():
                     target_options = [p.name for p in alive_allies] + ["Back"]
                     if event.key == pygame.K_UP:
                         sub_row = (sub_row - 1) % len(target_options)
-                        cursor_sound.play()
+                        if cursor_sound:
+                            cursor_sound.play()
                     elif event.key == pygame.K_DOWN:
                         sub_row = (sub_row + 1) % len(target_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_SPACE:
-                        confirm_sound.play()
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_SPACE:
+                        if confirm_sound:
+                            confirm_sound.play()
                         choice = target_options[sub_row]
                         if choice == "Back":
                             cur_menu = "MAGIC SUBMENU"
@@ -835,12 +1044,15 @@ def main():
                     target_options = [p.name for p in dead_allies] + ["Back"]
                     if event.key == pygame.K_UP:
                         sub_row = (sub_row - 1) % len(target_options)
-                        cursor_sound.play()
+                        if cursor_sound:
+                            cursor_sound.play()
                     elif event.key == pygame.K_DOWN:
                         sub_row = (sub_row + 1) % len(target_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_SPACE:
-                        confirm_sound.play()
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_SPACE:
+                        if confirm_sound:
+                            confirm_sound.play()
                         choice = target_options[sub_row]
                         if choice == "Back":
                             cur_menu = "MAGIC SUBMENU"
@@ -866,12 +1078,15 @@ def main():
                     target_options = [p.name for p in party] + ["Back"]
                     if event.key == pygame.K_UP:
                         sub_row = (sub_row - 1) % len(target_options)
-                        cursor_sound.play()
+                        if cursor_sound:
+                            cursor_sound.play()
                     elif event.key == pygame.K_DOWN:
                         sub_row = (sub_row + 1) % len(target_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_SPACE:
-                        confirm_sound.play()
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_SPACE:
+                        if confirm_sound:
+                            confirm_sound.play()
                         choice = target_options[sub_row]
                         if choice == "Back":
                             cur_menu = "MAGIC SUBMENU"
@@ -893,12 +1108,15 @@ def main():
                     target_options = [p.name for p in seize_targets] + ["Back"]
                     if event.key == pygame.K_UP:
                         sub_row = (sub_row - 1) % len(target_options)
-                        cursor_sound.play()
+                        if cursor_sound:
+                            cursor_sound.play()
                     elif event.key == pygame.K_DOWN:
                         sub_row = (sub_row + 1) % len(target_options)
-                        cursor_sound.play()
-                    if event.key == pygame.K_SPACE:
-                        confirm_sound.play()
+                        if cursor_sound:
+                            cursor_sound.play()
+                    elif event.key == pygame.K_SPACE:
+                        if confirm_sound:
+                            confirm_sound.play()
                         if target_options[sub_row] == "Back":
                             cur_menu = "MAGIC SUBMENU"
                             sub_row = 0
@@ -916,16 +1134,16 @@ def main():
 
                             
         if is_attacking:
-            if attack_timer > 25: # first phase of the animation
+            if attack_timer > 25: # First phase of the animation
                 hero.x -= 20
                 hero.y -= 10
-            elif attack_timer > 15: # second phase of the animation
+            elif attack_timer > 15: # Second phase of the animation
                 pass
             elif attack_timer > 0:
                 hero.x += 20
                 hero.y += 10
 
-            attack_timer -= 1 # countdown timer
+            attack_timer -= 1 # Countdown timer
 
             if attack_timer == 0:
                 is_attacking = False
@@ -967,6 +1185,28 @@ def main():
                     if hero.cooldowns[move_key] > 0:
                         hero.cooldowns[move_key] -= 1
 
+        if enemy.hp <= 0:
+            music.stop()
+            pygame.time.delay(1000)
+            run_enabler_menu(virtual_screen, window, display_res, font, small_font, party, cursor_sound, confirm_sound)
+            reset_battle(party, enemy)
+            music.play(-1)
+            active_hero_index = 0
+            cur_menu = "MAIN BATTLE MENU"
+            cur_col, cur_row, sub_row = 0, 0, 0
+            continue
+        
+        if all(hero.hp <= 0 for hero in party):
+            music.stop()
+            pygame.time.delay(1000)
+            run_enabler_menu(virtual_screen, window, display_res, font, small_font, party, cursor_sound, confirm_sound)
+            reset_battle(party, enemy)
+            music.play(-1)
+            active_hero_index = 0
+            cur_menu = "MAIN BATTLE MENU"
+            cur_col, cur_row, sub_row = 0, 0, 0
+            continue
+
         scaled_surface = pygame.transform.smoothscale(virtual_screen, display_res)
         window.blit(scaled_surface, (0, 0))
         pygame.display.flip()
@@ -977,4 +1217,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
