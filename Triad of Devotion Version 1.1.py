@@ -3,7 +3,6 @@ import sys
 import random
 
 # The game is beatable in at least 65 enemy turns (my test run). Maybe try to beat my score (hint: The default ENABLER loadout is intentionally not the best, so I didn't use it)
-# Need to fix block key
 
 white = (255, 255, 255)
 blue = (0, 0, 150)
@@ -145,7 +144,7 @@ SYNERGY_MOVES = [
 ]
 
 class Characters:
-    def __init__(self, name, hp, mp, x, y, image_path, is_enemy = False):
+    def __init__(self, name, hp, mp, x, y, image_path, portrait_image_path=None, is_enemy=False):
         self.name = name
         self.hp, self.max_hp = hp, hp
         self.mp, self.max_mp = mp, mp
@@ -168,10 +167,17 @@ class Characters:
         self.cooldowns = {"Counter": 0, "Twin Cast": 0, "Charge": 0}
         try:
             self.image = pygame.image.load(image_path).convert_alpha()
-            self.image = pygame.transform.scale(self.image, (150, 200))
+            self.image = pygame.transform.scale(self.image, (300, 450))
+            if is_enemy:
+                self.image = pygame.transform.scale(self.image, (250, 250))
+            if portrait_image_path:
+                self.portrait_image = pygame.image.load(portrait_image_path).convert_alpha()
+                self.portrait_image = pygame.transform.scale(self.portrait_image, (300, 450))
         except:
-            self.image = pygame.Surface((150, 200))
+            self.image = pygame.Surface((100, 200))
             self.image.fill((80, 80, 120))
+            self.portrait_image = pygame.Surface((100, 200))
+            self.portrait_image.fill((80, 80, 120))
         self.is_attacking = False
         self.attack_timer = 0
         self.last_attack_blocked = False
@@ -305,9 +311,9 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
     pygame.draw.rect(virtual_screen, blue, menu_rect)
     pygame.draw.rect(virtual_screen, white, menu_rect, 2)
 
-    pygame.draw.rect(virtual_screen, gray, (enemy.base_x - 20, enemy.base_y - 20, 150, 15)) # HP bar
-    pygame.draw.rect(virtual_screen, green, (enemy.base_x - 20, enemy.base_y - 20, (enemy.hp / max(1, enemy.max_hp)) * 150, 15))
-    virtual_screen.blit(font.render(f"HP: {enemy.hp}/{enemy.max_hp}", True, white), (enemy.base_x - 20, enemy.base_y - 50))
+    pygame.draw.rect(virtual_screen, gray, (enemy.base_x + 50, enemy.base_y - 20, 150, 15)) # HP bar
+    pygame.draw.rect(virtual_screen, green, (enemy.base_x + 50, enemy.base_y - 20, (enemy.hp / max(1, enemy.max_hp)) * 150, 15))
+    virtual_screen.blit(font.render(f"HP: {enemy.hp}/{enemy.max_hp}", True, white), (enemy.base_x + 50, enemy.base_y - 50))
     turn_font = pygame.font.SysFont("Arial", 28, bold=True)
     turn_text = turn_font.render(f"Turns Remaining: {enemy_turns_remaining}", True, red)
     virtual_screen.blit(turn_text, (300, 20))
@@ -458,7 +464,7 @@ def run_enabler_menu(virtual_screen, window, display_res, font, small_font, part
     list_x, list_y = 10, 410
     line_h = 28
     visible_count = 10
-    desc_x, desc_y, desc_w, desc_h = 420, 440, 340, 120
+    desc_x, desc_y, desc_w, desc_h = 500, 440, 340, 120
 
     while is_equipping:
         virtual_screen.fill((0, 0, 50))
@@ -469,7 +475,7 @@ def run_enabler_menu(virtual_screen, window, display_res, font, small_font, part
         virtual_screen.blit(instructions, (20, 50))
         hero_text = font.render(f"Hero: < {hero.name} >", True, (0, 255, 255))
         virtual_screen.blit(hero_text, (20, 100))
-        virtual_screen.blit(hero.image, (300, 190))
+        virtual_screen.blit(hero.portrait_image, (240, 200))
 
         pygame.draw.rect(virtual_screen, (22 , 22, 40), (10, 140, 260, 90))
         pygame.draw.rect(virtual_screen, (180, 180, 180), (10, 140, 260, 90), 1)
@@ -628,12 +634,12 @@ def main():
 
     protect_options = []
     party = [
-        Characters("Ethan", 1000, 50, 550, 250, "ethan.png"), 
-        Characters("Elena", 1000, 50, 400, 250, "elena.png"), 
-        Characters("Evelyn", 1000, 50, 650, 100, "evelyn.png")
+        Characters("Ethan", 1000, 50, 450, 150, "ethan.png", "ethan_portrait.png"), 
+        Characters("Elena", 1000, 50, 400, 250, "elena.png", "elena_portrait.png"), 
+        Characters("Evelyn", 1000, 50, 550, 100, "evelyn.png", "evelyn_portrait.png")
     ]
 
-    enemy = Characters("Boss", 10000, 0, 150, 50, "boss.png", is_enemy=True)
+    enemy = Characters("Boss", 10000, 0, 70, 50, image_path="boss.png", is_enemy=True)
     active_hero_index = 0
     target_hero = None
 
@@ -1207,9 +1213,9 @@ def main():
                 enemy.y += 10
             elif enemy_attack_timer > 15: # Second phase of the animation
                 icon_font = pygame.font.SysFont("Arial", 40, bold=True)
-                expected_key_display = BLOCK_KEYS.get(target_hero.name, target_hero.name[0]).upper()
+                expected_key_display = BLOCK_KEYS[target_hero.name].upper()
                 icon_surf = icon_font.render(f"! {expected_key_display}", True, red)
-                virtual_screen.blit(icon_surf, (target_hero.x + 60, target_hero.y - 50))
+                virtual_screen.blit(icon_surf, (target_hero.x + 120, target_hero.y + 20))
             elif enemy_attack_timer > 0:
                 enemy.x -= 20
                 enemy.y -= 10
