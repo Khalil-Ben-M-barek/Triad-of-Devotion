@@ -2,7 +2,6 @@ import pygame
 import sys
 import random
 
-# The game is beatable in at least 65 enemy turns (my test run). Maybe try to beat my score (hint: The default ENABLER loadout is intentionally not the best, so I didn't use it)
 
 white = (255, 255, 255)
 blue = (0, 0, 150)
@@ -144,7 +143,7 @@ SYNERGY_MOVES = [
 ]
 
 class Characters:
-    def __init__(self, name, hp, mp, x, y, image_path, portrait_image_path=None, is_enemy=False):
+    def __init__(self, name, hp, mp, x, y, image_path, portrait_image_path=None, controlled_image_path=None, is_enemy=False):
         self.name = name
         self.hp, self.max_hp = hp, hp
         self.mp, self.max_mp = mp, mp
@@ -164,24 +163,41 @@ class Characters:
         self.chi_level = 0
         self.is_counter_active = False 
         self.is_twin_cast_active = False
+        self.is_controlled = False
         self.cooldowns = {"Counter": 0, "Twin Cast": 0, "Charge": 0}
         try:
             self.image = pygame.image.load(image_path).convert_alpha()
             self.image = pygame.transform.scale(self.image, (300, 450))
             if is_enemy:
                 self.image = pygame.transform.scale(self.image, (250, 250))
+        except:
+            self.image = pygame.Surface((100, 200))
+            self.image.fill((80, 80, 120))
+
+        self.original_image = self.image
+        try:
+            if controlled_image_path:
+                self.controlled_image = pygame.image.load(controlled_image_path).convert_alpha()
+                self.controlled_image = pygame.transform.scale(self.controlled_image, (300, 450))
+            else:
+                self.controlled_image = self.image.copy()
+        except:
+            self.controlled_image = pygame.Surface((100, 200)) 
+            self.controlled_image.fill((200, 50, 50))
+
+        try:
             if portrait_image_path:
                 self.portrait_image = pygame.image.load(portrait_image_path).convert_alpha()
                 self.portrait_image = pygame.transform.scale(self.portrait_image, (300, 450))
         except:
-            self.image = pygame.Surface((100, 200))
-            self.image.fill((80, 80, 120))
             self.portrait_image = pygame.Surface((100, 200))
             self.portrait_image.fill((80, 80, 120))
+
         self.is_attacking = False
         self.attack_timer = 0
         self.last_attack_blocked = False
         self.failed_block_attempt = False
+
         if name == "Ethan": self.enabler = ["Potential Seize", "Strike"]
         elif name == "Elena": self.enabler = ["Manipulate", "Revive"]
         elif name == "Evelyn": self.enabler = ["Rebirth", "Healing"]
@@ -305,7 +321,7 @@ def get_unique_abilities(hero):
     abilities.append("Back")
     return abilities
 
-def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, protect_options, hero, attack_options, potential_options, magic_options, synergy_options, party, enemy_turns_remaining):
+def draw_battle_menu(virtual_screen, font, small_font, col, row, cur_menu, sub_row, enemy, protect_options, hero, attack_options, potential_options, magic_options, synergy_options, party, enemy_turns_remaining):
     global current_hover_text, scroll_x
 
     pygame.draw.rect(virtual_screen, blue, menu_rect)
@@ -313,7 +329,8 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
 
     pygame.draw.rect(virtual_screen, gray, (enemy.base_x + 50, enemy.base_y - 20, 150, 15)) # HP bar
     pygame.draw.rect(virtual_screen, green, (enemy.base_x + 50, enemy.base_y - 20, (enemy.hp / max(1, enemy.max_hp)) * 150, 15))
-    virtual_screen.blit(font.render(f"HP: {enemy.hp}/{enemy.max_hp}", True, white), (enemy.base_x + 50, enemy.base_y - 50))
+    virtual_screen.blit(small_font.render(f"HP: {enemy.hp}/{enemy.max_hp}", True, white), (enemy.base_x + 50, enemy.base_y - 37))
+    virtual_screen.blit(small_font.render(f"{enemy.name}", True, red), (enemy.base_x + 110, enemy.base_y -50))
     turn_font = pygame.font.SysFont("Arial", 28, bold=True)
     turn_text = turn_font.render(f"Turns Remaining: {enemy_turns_remaining}", True, red)
     virtual_screen.blit(turn_text, (300, 20))
@@ -377,15 +394,15 @@ def draw_battle_menu(virtual_screen, font, col, row, cur_menu, sub_row, enemy, p
         elif cur_menu == "SYNERGY SUBMENU":
             options = synergy_options
         elif cur_menu == "HEALING TARGET SUBMENU":
-            options = [p.name for p in party if  0 < p.hp < p.max_hp] + ["Back"]
+            options = [p.name for p in party if 0 < p.hp < p.max_hp and not p.is_controlled] + ["Back"]
         elif cur_menu == "REVIVAL TARGET SUBMENU":
             options = [p.name for p in party if p.hp <= 0] + ["Back"]
         elif cur_menu == "SEIZE TARGET SUBMENU":
-            options = [p.name for p in party if p != hero and p.potential_value > 0] + ["Back"]
+            options = [p.name for p in party if p != hero and p.hp > 0 and p.potential_value > 0 and not p.is_controlled] + ["Back"]
         elif cur_menu == "MANIPULATE TARGET SUBMENU":
-            options = [p.name for p in party] + ["Back"]
+            options = [p.name for p in party if p.hp > 0 and not p.is_controlled] + ["Back"]
         elif cur_menu == "TWIN CAST SUBMENU":
-            options = [p.name for p in party if p.hp > 0] + ["Back"]
+            options = [p.name for p in party if p.hp > 0 and not p.is_controlled] + ["Back"]
         if sub_row >= len(options):
             sub_row = 0
 
@@ -634,12 +651,12 @@ def main():
 
     protect_options = []
     party = [
-        Characters("Ethan", 1000, 50, 450, 150, "ethan.png", "ethan_portrait.png"), 
-        Characters("Elena", 1000, 50, 400, 250, "elena.png", "elena_portrait.png"), 
-        Characters("Evelyn", 1000, 50, 550, 100, "evelyn.png", "evelyn_portrait.png")
+        Characters("Ethan", 1000, 50, 450, 150, "ethan.png", "ethan_portrait.png", "ethan_controlled.png"), 
+        Characters("Elena", 1000, 50, 400, 250, "elena.png", "elena_portrait.png", "elena_controlled.png"), 
+        Characters("Evelyn", 1000, 50, 550, 100, "evelyn.png", "evelyn_portrait.png", "evelyn_controlled.png")
     ]
 
-    enemy = Characters("Boss", 10000, 0, 70, 50, image_path="boss.png", is_enemy=True)
+    enemy = Characters("Void", 10000, 0, 70, 50, image_path="void.png", is_enemy=True)
     active_hero_index = 0
     target_hero = None
 
@@ -676,18 +693,33 @@ def main():
     is_running = True
     while is_running:
         virtual_screen.fill((30, 30, 30))
-        hero = party[active_hero_index]
+        controlled_hero = None
+        for p in party:
+            if p.is_controlled:
+                controlled_hero = p
+                break
 
+        living_uncontrolled_heroes = [p for p in party if p.hp > 0 and not p.is_controlled]
+        if controlled_hero and len(living_uncontrolled_heroes) == 0:
+            controlled_hero.is_controlled = False
+            controlled_hero.image = controlled_hero.original_image
+            controlled_hero = None
+        if party[active_hero_index].hp <= 0 or party[active_hero_index].is_controlled:
+            active_hero_index = (active_hero_index + 1) % len(party)
+            continue
+
+        hero = party[active_hero_index]
+        current_attacker = controlled_hero if controlled_hero else enemy
         virtual_screen.blit(enemy.image, (enemy.x, enemy.y))
         for p in party:
             virtual_screen.blit(p.image, (p.x, p.y))
 
         potential_options = get_potential_options(hero)
         magic_options = hero.enabler + ["Back"]
-        protect_options = [p.name for p in party if p != hero] + ["Back"]
+        protect_options = [p.name for p in party if p != hero and not p.is_controlled] + ["Back"]
 
         draw_individual_menus(virtual_screen, small_font, party, active_hero_index)
-        draw_battle_menu(virtual_screen, font, cur_col, cur_row, cur_menu, sub_row, enemy, protect_options, hero, attack_options, potential_options, magic_options, synergy_options, party, enemy_turns_remaining)
+        draw_battle_menu(virtual_screen, font, small_font, cur_col, cur_row, cur_menu, sub_row, enemy, protect_options, hero, attack_options, potential_options, magic_options, synergy_options, party, enemy_turns_remaining)
 
         if active_hero_index == 0 and not is_attacking and not enemy_is_attacking:
             if protect_used_this_turn:
@@ -712,16 +744,31 @@ def main():
                 if 15 < enemy_attack_timer < 25 and enemy_is_attacking:
                     key_pressed = pygame.key.name(event.key).lower()
                     expected_key = BLOCK_KEYS[target_hero.name]
-                    if not enemy.failed_block_attempt and not enemy.last_attack_blocked:
+                    if not current_attacker.failed_block_attempt and not current_attacker.last_attack_blocked:
                         if key_pressed == expected_key:
-                            enemy.last_attack_blocked = True
+                            current_attacker.last_attack_blocked = True
                             if confirm_sound:
                                 confirm_sound.play()
+                            enemy_attack_timer = 15
+                            if controlled_hero:
+                                controlled_hero.is_controlled = False
+                                controlled_hero.image = controlled_hero.original_image
+                                controlled_hero.x, controlled_hero.y = controlled_hero.base_x, controlled_hero.base_y
+                                for i, hero in enumerate(party):
+                                    if hero == controlled_hero: 
+                                        active_hero_index = i
+                                        break
+                                controlled_hero = None
+                            cur_menu = "MAIN BATTLE MENU"
+                            cur_col, cur_row, sub_row = 0, 0, 0
                         else:
-                            enemy.failed_block_attempt= True
+                            current_attacker.failed_block_attempt= True
 
                 if cur_menu == "MAIN BATTLE MENU":
-
+                    if cur_col >= len(battle_menu):
+                        cur_col = len(battle_menu) - 1
+                    if cur_row >= len(battle_menu[cur_col]):
+                        cur_row = len(battle_menu[cur_col]) - 1
                     if event.key == pygame.K_UP:
                         cur_row = (cur_row - 1) % len(battle_menu[cur_col])
                         if cursor_sound:
@@ -757,7 +804,7 @@ def main():
                                 cur_menu = "POTENTIAL SUBMENU"
                         elif battle_menu[cur_col][cur_row] == "Synergy Abilities":
                             # If any move is available/satisfies the conditions
-                            if any(m for m in SYNERGY_MOVES if hero.name in m.heroes and all(p.synergy_bars >= m.synergy_bars_required for p in party if p.name in m.heroes)):
+                            if any(m for m in SYNERGY_MOVES if hero.name in m.heroes and all(p.synergy_bars >= m.synergy_bars_required and not p.is_controlled for p in party if p.name in m.heroes)):
                                 synergy_options = [move.name for move in SYNERGY_MOVES if hero.name in move.heroes]
                                 synergy_options.append("Back")
                                 cur_menu = "SYNERGY SUBMENU"
@@ -828,9 +875,11 @@ def main():
                             current_potential_move = potential_options[sub_row]
                             hero.potential_value = 0
                             hero.potential_level = max(1, hero.potential_level - 1)
+
                             if current_potential_move == "Soothing Gale":
                                 for p in party:
-                                    p.heal(500)
+                                    if p.hp > 0 and not p.is_controlled:
+                                        p.heal(500)
                                 enemy_is_attacking = True
                                 enemy_attack_timer = 40
                                 cur_menu = "MAIN BATTLE MENU"
@@ -838,7 +887,8 @@ def main():
                             
                             elif current_potential_move == "Potential Impart":
                                 for p in party: 
-                                    if p != hero: p.potential_value = p.max_potential_value
+                                    if p != hero and not p.is_controlled and p.hp > 0:
+                                        p.potential_value = p.max_potential_value
                                 enemy_is_attacking = True
                                 enemy_attack_timer = 40
                                 cur_menu = "MAIN BATTLE MENU"
@@ -846,8 +896,9 @@ def main():
 
                             elif current_potential_move == "Full Restore":
                                 for p in party:
-                                    p.hp = p.max_hp
-                                    p.mp = p.max_mp
+                                    if p.hp > 0 and not p.is_controlled:
+                                        p.hp = p.max_hp
+                                        p.mp = p.max_mp
 
                                 enemy_is_attacking = True
                                 enemy_attack_timer = 40
@@ -966,7 +1017,7 @@ def main():
                                 sub_row = 0
 
                 elif cur_menu == "TWIN CAST SUBMENU":
-                    alive_allies = [p for p in party if p.hp > 0]
+                    alive_allies = [p for p in party if p.hp > 0 and not p.is_controlled]
                     target_options = [p.name for p in alive_allies] + ["Back"]
                     if event.key == pygame.K_UP:
                         sub_row = (sub_row - 1) % len(target_options)
@@ -979,6 +1030,8 @@ def main():
                     elif event.key == pygame.K_SPACE:
                         if confirm_sound:
                             confirm_sound.play()
+                        if sub_row >= len(target_options):
+                            sub_row = 0
                         choice = target_options[sub_row]
                         if choice == "Back":
                             cur_menu = "ATTACK SUBMENU"
@@ -1036,7 +1089,7 @@ def main():
                                 enemy_attack_timer = 40
 
                 elif cur_menu == "HEALING TARGET SUBMENU":
-                    alive_allies = [p for p in party if p.hp > 0]
+                    alive_allies = [p for p in party if p.hp > 0 and not p.is_controlled]
                     target_options = [p.name for p in alive_allies] + ["Back"]
                     if event.key == pygame.K_UP:
                         sub_row = (sub_row - 1) % len(target_options)
@@ -1049,6 +1102,8 @@ def main():
                     elif event.key == pygame.K_SPACE:
                         if confirm_sound:
                             confirm_sound.play()
+                        if sub_row >= len(target_options):
+                            sub_row = 0
                         choice = target_options[sub_row]
                         if choice == "Back":
                             cur_menu = "MAGIC SUBMENU"
@@ -1082,6 +1137,8 @@ def main():
                     elif event.key == pygame.K_SPACE:
                         if confirm_sound:
                             confirm_sound.play()
+                        if sub_row >= len(target_options):
+                            sub_row = 0
                         choice = target_options[sub_row]
                         if choice == "Back":
                             cur_menu = "MAGIC SUBMENU"
@@ -1108,8 +1165,8 @@ def main():
                                 enemy_attack_timer = 40
 
                 elif cur_menu == "MANIPULATE TARGET SUBMENU":
-                    alive_allies = [p for p in party if p.hp > 0]
-                    target_options = [p.name for p in party] + ["Back"]
+                    alive_allies = [p for p in party if p.hp > 0 and not p.is_controlled]
+                    target_options = [p.name for p in alive_allies] + ["Back"]
                     if event.key == pygame.K_UP:
                         sub_row = (sub_row - 1) % len(target_options)
                         if cursor_sound:
@@ -1121,6 +1178,8 @@ def main():
                     elif event.key == pygame.K_SPACE:
                         if confirm_sound:
                             confirm_sound.play()
+                        if sub_row >= len(target_options):
+                            sub_row = 0
                         choice = target_options[sub_row]
                         if choice == "Back":
                             cur_menu = "MAGIC SUBMENU"
@@ -1156,6 +1215,8 @@ def main():
                     elif event.key == pygame.K_SPACE:
                         if confirm_sound:
                             confirm_sound.play()
+                        if sub_row >= len(target_options):
+                            sub_row = 0
                         choice = target_options[sub_row]
                         if target_options[sub_row] == "Back":
                             cur_menu = "MAGIC SUBMENU"
@@ -1198,34 +1259,53 @@ def main():
                 
         if enemy_is_attacking:
             if enemy_attack_timer == 40:
-                enemy.last_attack_blocked = False
-                enemy.failed_block_attempt = False
-                living_heroes = [p for p in party if p.hp > 0]
-                if living_heroes:
-                    if enemy.forced_target and enemy.forced_target.hp > 0:
+                current_attacker.last_attack_blocked = False
+                current_attacker.failed_block_attempt = False
+                if not controlled_hero and living_uncontrolled_heroes and random.randint(1, 10) == 1:
+                    target = random.choice(living_uncontrolled_heroes)
+                    target.is_controlled = True
+                    target.original_image = target.image
+                    target.image = target.controlled_image
+                    target.x, target.y = enemy.x + 180, enemy.y + 50
+                    enemy_is_attacking = False
+                    enemy_attack_timer = 0
+                    enemy_turn_count += 1
+                    enemy_turns_remaining -= 1
+                    active_hero_index = (active_hero_index + 1) % len(party)
+                    while party[active_hero_index].hp <= 0 or party[active_hero_index].is_controlled:
+                        active_hero_index = (active_hero_index + 1) % len(party)
+                    cur_menu = "MAIN BATTLE MENU"
+                    cur_col, cur_row, sub_row = 0, 0, 0
+                    continue
+
+                if living_uncontrolled_heroes:
+                    if enemy.forced_target and enemy.forced_target.hp > 0 and not enemy.forced_target.is_controlled:
                         target_hero = enemy.forced_target
                         enemy.forced_target = None
                     else:
-                        target_hero = random.choice(living_heroes)
+                        target_hero = random.choice(living_uncontrolled_heroes)
 
             if enemy_attack_timer > 25: # First phase of the animation
-                enemy.x += 20
-                enemy.y += 10
+                current_attacker.x += 20
+                current_attacker.y += 10
             elif enemy_attack_timer > 15: # Second phase of the animation
                 icon_font = pygame.font.SysFont("Arial", 40, bold=True)
                 expected_key_display = BLOCK_KEYS[target_hero.name].upper()
                 icon_surf = icon_font.render(f"! {expected_key_display}", True, red)
                 virtual_screen.blit(icon_surf, (target_hero.x + 120, target_hero.y + 20))
             elif enemy_attack_timer > 0:
-                enemy.x -= 20
-                enemy.y -= 10
+                current_attacker.x -= 20
+                current_attacker.y -= 10
 
             enemy_attack_timer -= 1
 
             if enemy_attack_timer == 0:
                 enemy_is_attacking = False
-                enemy.x, enemy.y = enemy.base_x, enemy.base_y
-                target_hero.take_damage(random.randint(100,150), party, attacker=enemy)
+                if controlled_hero:
+                    controlled_hero.x, controlled_hero.y = enemy.x + 180, enemy.y + 50
+                else:
+                    enemy.x, enemy.y = enemy.base_x, enemy.base_y
+                target_hero.take_damage(random.randint(100,150), party, attacker=current_attacker)
                 enemy_turn_count += 1
                 enemy_turns_remaining -= 1
                 if enemy_turns_remaining <= 0:
