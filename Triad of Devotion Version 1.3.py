@@ -2,7 +2,6 @@ import pygame
 import sys
 import random
 
-
 white = (255, 255, 255)
 blue = (0, 0, 150)
 gray = (100, 100, 100)
@@ -552,6 +551,25 @@ def run_enabler_menu(virtual_screen, window, display_res, font, small_font, part
 
         if available_enabler:
             current_enabler = available_enabler[cursor_index]
+
+            block_box_x, block_box_y = 500, 120
+            block_box_w, block_box_h = 290, 220
+            pygame.draw.rect(virtual_screen, (22, 22, 40), (block_box_x, block_box_y, block_box_w, block_box_h))
+            pygame.draw.rect(virtual_screen, (0, 180, 200), (block_box_x, block_box_y, block_box_w, block_box_h), 2)
+
+            header = font.render("BLOCK COMMANDS", True, yellow)
+            virtual_screen.blit(header, (block_box_x + 10, block_box_y + 10))
+            pygame.draw.line(virtual_screen, (0, 180, 200), (block_box_x + 10, block_box_y + 34), (block_box_x + block_box_w - 10, block_box_y + 34), 1)
+            block_lines = [("When the enemy attacks, press the", white), ("corresponding key to block:", white), ("", white)]
+
+            for hero_name, key in BLOCK_KEYS.items():
+                block_lines.append((f"  {hero_name}: [ {key.upper()} ]", (0, 255, 200)))
+
+            block_lines += [("", white), ("Blocking also frees an ally under enemy control.", (255, 200, 80))]
+
+            for i, (line, color) in enumerate(block_lines):
+                virtual_screen.blit(small_font.render(line, True, color), (block_box_x + 10, block_box_y + 44 + i * 20))
+
             desc = DESCRIPTIONS[current_enabler]
             words = desc.split()
             lines = []
@@ -675,17 +693,17 @@ def main():
 
     pygame.mixer.init()
     try:
-        cursor_sound = pygame.mixer.Sound("cursor.mp3")
+        cursor_sound = pygame.mixer.Sound("cursor.wav")
     except:
         cursor_sound = None
     try:
-        confirm_sound = pygame.mixer.Sound("confirm.mp3")
+        confirm_sound = pygame.mixer.Sound("confirm.wav")
     except:
         confirm_sound = None
 
     run_enabler_menu(virtual_screen, window, display_res, font, small_font, party, cursor_sound, confirm_sound)
     try:
-        music = pygame.mixer.Sound("battle_theme.mp3")
+        music = pygame.mixer.Sound("collision_of_destinies.mp3")
         music.play(-1)
     except:
         music = None
@@ -747,9 +765,9 @@ def main():
                     if not current_attacker.failed_block_attempt and not current_attacker.last_attack_blocked:
                         if key_pressed == expected_key:
                             current_attacker.last_attack_blocked = True
+                            enemy.last_attack_blocked = True
                             if confirm_sound:
                                 confirm_sound.play()
-                            enemy_attack_timer = 15
                             if controlled_hero:
                                 controlled_hero.is_controlled = False
                                 controlled_hero.image = controlled_hero.original_image
@@ -1264,6 +1282,7 @@ def main():
                 if not controlled_hero and living_uncontrolled_heroes and random.randint(1, 10) == 1:
                     target = random.choice(living_uncontrolled_heroes)
                     target.is_controlled = True
+                    target.is_protecting_target = None
                     target.original_image = target.image
                     target.image = target.controlled_image
                     target.x, target.y = enemy.x + 180, enemy.y + 50
