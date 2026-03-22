@@ -2,6 +2,8 @@ import pygame
 import sys
 import random
 
+# The game is beatable in as few as 65 enemy turns (my test run). Maybe try to beat my score (hint: The default ENABLER loadout is intentionally not the best, so I didn't use it)
+
 white = (255, 255, 255)
 blue = (0, 0, 150)
 gray = (100, 100, 100)
@@ -64,11 +66,10 @@ DESCRIPTIONS = {
     ),
     "Protect Stance": (
         "Any ally can enter this stance and choose one other ally to protect and gain synergy bars with. " 
-        "If the next enemy attack is directed at the protected target and the normal block command is successful, "
+        "If an attack is directed at the protected target and the normal block command is successful, "
         "the damage is nullified for that attack and both the protector and the protected gain 1 synergy bar. " 
-        "If the block fails, both take half the attack damage. " 
-        "If the enemy attacks anyone other than the protected target (including the protector), the Protect Stance fails. " 
-        "Only one hero may initiate this stance per party rotation (until all three heroes have acted)."  
+        "If the block fails, both take half the attack damage. The stance ends at the end of each party rotation. " 
+        "Only one hero may initiate this stance per party rotation."  
     ), 
     "Flurry Slash": "Ethan's Level 1 Potential Breach. Ethan's weakest Potential Breach.",
 
@@ -228,7 +229,8 @@ class Characters:
             else:
                 self.hp = max(0, self.hp - amount // 2)
                 protector.hp = max(0, protector.hp - amount // 2)
-                protector.is_protecting_target = None
+                self.potential_value = min(self.max_potential_value, self.potential_value + ((amount // 2) / self.max_hp) * 170)
+                protector.potential_value = min(protector.max_potential_value, protector.potential_value + ((amount // 2) / protector.max_hp) * 170)
                 return
 
         if attacker and attacker.last_attack_blocked:
@@ -255,9 +257,9 @@ def get_potential_options(hero):
 
 def draw_individual_menus(virtual_screen, small_font, party, active_hero_index):
     for i, hero in enumerate(party):
-        box_width, box_height = 200, 80
+        box_width, box_height = 200, 76
         box_x = 580
-        box_y = 340 + (i * 75)
+        box_y = 340 + (i * 78)
         color = (0, 180, 200) if i == active_hero_index else white
         pygame.draw.rect(virtual_screen, (15, 25, 35), (box_x, box_y, box_width, box_height))
         pygame.draw.rect(virtual_screen, color, (box_x, box_y, box_width, box_height), 2)
@@ -468,7 +470,7 @@ def draw_battle_menu(virtual_screen, font, small_font, col, row, cur_menu, sub_r
         if (scroll_x + text_surface.get_width()) < 0:
             scroll_x = box_width
 
-def run_enabler_menu(virtual_screen, window, display_res, font, small_font, party, cursor_sound, confirm_sound):
+def run_setup_menu(virtual_screen, window, display_res, font, small_font, party, cursor_sound, confirm_sound, turn_order):
     is_equipping = True
     available_enabler = list(ENABLER_STATS.keys())
     hero_index = 0
@@ -481,12 +483,15 @@ def run_enabler_menu(virtual_screen, window, display_res, font, small_font, part
     line_h = 28
     visible_count = 10
     desc_x, desc_y, desc_w, desc_h = 500, 440, 340, 120
+    turn_cursor = 0
+    active_panel = "ENABLER"  # Or "TURN ORDER"
+    turn_first_selected = -1
 
     while is_equipping:
         virtual_screen.fill((0, 0, 50))
         hero = party[hero_index]
-        title_text = font.render("ENABLER EQUIP SETUP", True, yellow)
-        instructions = small_font.render("LEFT/RIGHT: Change Hero | UP/DOWN: Select Enabler | SPACE: Toggle Equip | ENTER: Start Battle", True, (200, 200, 200))
+        title_text = font.render("SETUP MENU", True, yellow)
+        instructions = small_font.render("LEFT/RIGHT: Change Hero | UP/DOWN: Navigate | SPACE: Select/Swap | TAB: Switch Panel | ENTER: Start Battle", True, white)
         virtual_screen.blit(title_text, (20, 20))
         virtual_screen.blit(instructions, (20, 50))
         hero_text = font.render(f"Hero: < {hero.name} >", True, (0, 255, 255))
@@ -495,17 +500,19 @@ def run_enabler_menu(virtual_screen, window, display_res, font, small_font, part
 
         pygame.draw.rect(virtual_screen, (22 , 22, 40), (10, 140, 260, 90))
         pygame.draw.rect(virtual_screen, (180, 180, 180), (10, 140, 260, 90), 1)
-        virtual_screen.blit(small_font.render("Equipped Enabler:", True, orange), (slot_x - 50, slot_y - 15))
+        virtual_screen.blit(small_font.render("Equipped Enablers:", True, orange), (slot_x - 50, slot_y - 15))
+        pygame.draw.line(virtual_screen, (180, 180, 180), (slot_x - 130, slot_y + 8), (slot_x + 128, slot_y + 8), 1)
 
         pygame.draw.rect(virtual_screen, (22,22,40), (8, 375, 281, 172))
         pygame.draw.rect(virtual_screen, (180, 180, 180), (8, 375, 281, 206), 1)
-        virtual_screen.blit(small_font.render("Available Enabler:", True, orange), (slot_x - 50, slot_y + 220))
+        virtual_screen.blit(small_font.render("Available Enablers:", True, orange), (slot_x - 50, slot_y + 220))
         virtual_screen.blit(small_font.render("MP:", True, orange), (slot_x + 117, slot_y + 220))
+        pygame.draw.line(virtual_screen, (180, 180, 180), (slot_x - 131, slot_y + 249), (slot_x + 148, slot_y + 249), 1)
 
         for i in range(MAX_ENABLER_SLOTS):
             y = slot_y + (i * 30)
             text = hero.enabler[i] if i < len(hero.enabler) else "Empty"
-            virtual_screen.blit(small_font.render(f"{i+1}. {text}", True, (220, 220, 220)), (slot_x - 50, y + 6))
+            virtual_screen.blit(small_font.render(f"{i+1}. {text}", True, (220, 220, 220)), (slot_x - 50, y + 13))
 
         if len(available_enabler) == 0:
             cursor_index = 0
@@ -516,7 +523,7 @@ def run_enabler_menu(virtual_screen, window, display_res, font, small_font, part
         for index in range(top_index, min(len(available_enabler), top_index + visible_count)):
             enabler = available_enabler[index]
             y = list_y + (index - top_index) * line_h
-            is_cursor = (index == cursor_index)
+            is_cursor = (index == cursor_index and active_panel == "ENABLER")
 
             owner = None
             for p in party:
@@ -587,6 +594,20 @@ def run_enabler_menu(virtual_screen, window, display_res, font, small_font, part
             for i, ln in enumerate(lines[:6]): # Limit just in case
                 virtual_screen.blit(small_font.render(ln, True, (220,220,220)), (desc_x + 8, desc_y + 36 + i*18))
 
+        turn_box_x, turn_box_y = 292, 120
+        turn_box_w, turn_box_h = 185, 110
+        pygame.draw.rect(virtual_screen, (22, 22, 40), (turn_box_x, turn_box_y, turn_box_w, turn_box_h))
+        pygame.draw.rect(virtual_screen, (180, 100, 255), (turn_box_x, turn_box_y, turn_box_w, turn_box_h), 2)
+        virtual_screen.blit(small_font.render("Turn Order", True, (180, 100, 255)), (turn_box_x + 8, turn_box_y + 6))
+        pygame.draw.line(virtual_screen, (180, 100, 255), (turn_box_x + 8, turn_box_y + 24), (turn_box_x + turn_box_w - 8, turn_box_y + 24), 1)
+
+        for i, p in enumerate(turn_order):
+            row_y = turn_box_y + 32 + i * 22
+            row_color = yellow if i == turn_cursor and active_panel == "TURN ORDER" else (gray if i == turn_first_selected else white)
+            virtual_screen.blit(small_font.render(f"{i+1}. {p.name}", True, row_color), (turn_box_x + 20, row_y))
+            if i == turn_cursor and active_panel == "TURN ORDER":
+                pygame.draw.polygon(virtual_screen, yellow, [(turn_box_x + 8, row_y + 4), (turn_box_x + 16, row_y + 8), (turn_box_x + 8, row_y + 12)])
+
         for event in pygame.event.get():
             if event.type == pygame.QUIT:
                 pygame.quit()
@@ -595,6 +616,13 @@ def run_enabler_menu(virtual_screen, window, display_res, font, small_font, part
                 display_res = (event.w, event.h)
                 window = pygame.display.set_mode(display_res, pygame.RESIZABLE)
             if event.type == pygame.KEYDOWN:
+                if event.key == pygame.K_TAB:
+                    active_panel = "TURN ORDER" if active_panel == "ENABLER" else "ENABLER"
+                    cursor_index = 0
+                    turn_cursor = 0
+                    turn_first_selected = -1
+                    if cursor_sound:
+                        cursor_sound.play()
                 if event.key == pygame.K_LEFT:
                     hero_index = (hero_index - 1) % len(party)
                     cursor_index = 0
@@ -606,24 +634,39 @@ def run_enabler_menu(virtual_screen, window, display_res, font, small_font, part
                     if cursor_sound:
                         cursor_sound.play()
                 elif event.key == pygame.K_UP:
-                    cursor_index = (cursor_index - 1) % len(available_enabler)
+                    if active_panel == "ENABLER":
+                        cursor_index = (cursor_index - 1) % len(available_enabler)
+                    else:
+                        turn_cursor = (turn_cursor - 1) % len(turn_order)
                     if cursor_sound:
                         cursor_sound.play()
                 elif event.key == pygame.K_DOWN:
-                    cursor_index = (cursor_index + 1) % len(available_enabler)
+                    if active_panel == "ENABLER":
+                        cursor_index = (cursor_index + 1) % len(available_enabler)
+                    else:
+                        turn_cursor = (turn_cursor + 1) % len(turn_order)
                     if cursor_sound:
                         cursor_sound.play()
                 elif event.key == pygame.K_SPACE:
                     if confirm_sound:
                         confirm_sound.play()
-                    selected_enabler = available_enabler[cursor_index]
-                    if selected_enabler in hero.enabler:
-                        hero.enabler.remove(selected_enabler)
-                    elif len(hero.enabler) < MAX_ENABLER_SLOTS:
-                        for p in party:
-                            if selected_enabler in p.enabler:
-                                p.enabler.remove(selected_enabler)
-                        hero.enabler.append(selected_enabler)
+                    if active_panel == "ENABLER":
+                        selected_enabler = available_enabler[cursor_index]
+                        if selected_enabler in hero.enabler:
+                            hero.enabler.remove(selected_enabler)
+                        elif len(hero.enabler) < MAX_ENABLER_SLOTS:
+                            for p in party:
+                                if selected_enabler in p.enabler:
+                                    p.enabler.remove(selected_enabler)
+                            hero.enabler.append(selected_enabler)
+                    else:
+                        if turn_first_selected == -1:
+                            turn_first_selected = turn_cursor
+                        elif turn_first_selected == turn_cursor:
+                            turn_first_selected = -1  # Deselect
+                        else:
+                            turn_order[turn_first_selected], turn_order[turn_cursor] = turn_order[turn_cursor], turn_order[turn_first_selected]
+                            turn_first_selected = -1
                 elif event.key == pygame.K_RETURN:
                     is_equipping = False
                     if confirm_sound:
@@ -674,6 +717,8 @@ def main():
         Characters("Evelyn", 1000, 50, 550, 100, "evelyn.png", "evelyn_portrait.png", "evelyn_controlled.png")
     ]
 
+    turn_order = list(party)
+    default_turn_order = list(party)
     enemy = Characters("Void", 10000, 0, 70, 50, image_path="void.png", is_enemy=True)
     active_hero_index = 0
     target_hero = None
@@ -690,6 +735,7 @@ def main():
     cur_col, cur_row, sub_row = 0, 0, 0
     synergy_options = []
     attack_options = []
+    synergy_partner = None
 
     pygame.mixer.init()
     try:
@@ -701,7 +747,8 @@ def main():
     except:
         confirm_sound = None
 
-    run_enabler_menu(virtual_screen, window, display_res, font, small_font, party, cursor_sound, confirm_sound)
+    run_setup_menu(virtual_screen, window, display_res, font, small_font, party, cursor_sound, confirm_sound, turn_order)
+    party[:] = turn_order
     try:
         music = pygame.mixer.Sound("collision_of_destinies.mp3")
         music.play(-1)
@@ -711,6 +758,36 @@ def main():
     is_running = True
     while is_running:
         virtual_screen.fill((30, 30, 30))
+
+        if enemy.hp <= 0:
+            print("Enemy turns before reset:", enemy_turn_count)
+            enemy_turn_count = 0
+            enemy_turns_remaining = MAX_ENEMY_TURNS
+            music.stop()
+            pygame.time.delay(1000)
+            turn_order[:] = default_turn_order
+            run_setup_menu(virtual_screen, window, display_res, font, small_font, party, cursor_sound, confirm_sound, turn_order)
+            reset_battle(party, enemy)
+            music.play(-1)
+            active_hero_index = 0
+            cur_menu = "MAIN BATTLE MENU"
+            cur_col, cur_row, sub_row = 0, 0, 0
+            continue
+        
+        if all(hero.hp <= 0 for hero in party):
+            enemy_turn_count = 0
+            enemy_turns_remaining = MAX_ENEMY_TURNS
+            music.stop()
+            pygame.time.delay(1000)
+            turn_order[:] = default_turn_order
+            run_setup_menu(virtual_screen, window, display_res, font, small_font, party, cursor_sound, confirm_sound, turn_order)
+            reset_battle(party, enemy)
+            music.play(-1)
+            active_hero_index = 0
+            cur_menu = "MAIN BATTLE MENU"
+            cur_col, cur_row, sub_row = 0, 0, 0
+            continue
+
         controlled_hero = None
         for p in party:
             if p.is_controlled:
@@ -721,20 +798,26 @@ def main():
         if controlled_hero and len(living_uncontrolled_heroes) == 0:
             controlled_hero.is_controlled = False
             controlled_hero.image = controlled_hero.original_image
+            controlled_hero.x, controlled_hero.y = controlled_hero.base_x, controlled_hero.base_y
             controlled_hero = None
         if party[active_hero_index].hp <= 0 or party[active_hero_index].is_controlled:
+            if active_hero_index == 0 and protect_used_this_turn and not is_attacking and not enemy_is_attacking:
+                protect_used_this_turn = False
+                for p in party:
+                    p.is_protecting_target = None
+
             active_hero_index = (active_hero_index + 1) % len(party)
             continue
 
         hero = party[active_hero_index]
         current_attacker = controlled_hero if controlled_hero else enemy
         virtual_screen.blit(enemy.image, (enemy.x, enemy.y))
-        for p in party:
+        for p in default_turn_order:
             virtual_screen.blit(p.image, (p.x, p.y))
 
         potential_options = get_potential_options(hero)
         magic_options = hero.enabler + ["Back"]
-        protect_options = [p.name for p in party if p != hero and not p.is_controlled] + ["Back"]
+        protect_options = [p.name for p in party if p != hero and p.hp > 0 and not p.is_controlled] + ["Back"]
 
         draw_individual_menus(virtual_screen, small_font, party, active_hero_index)
         draw_battle_menu(virtual_screen, font, small_font, cur_col, cur_row, cur_menu, sub_row, enemy, protect_options, hero, attack_options, potential_options, magic_options, synergy_options, party, enemy_turns_remaining)
@@ -872,6 +955,7 @@ def main():
                                 is_attacking = True
                                 attack_timer = 40
                                 cur_menu = "MAIN BATTLE MENU"
+                                synergy_partner = partner
                                 cur_col, cur_row, sub_row = 0, 0, 0
 
                 elif cur_menu == "POTENTIAL SUBMENU":
@@ -943,8 +1027,6 @@ def main():
                                 
                                 cur_menu = "MAIN BATTLE MENU"
                                 cur_col, cur_row, sub_row = 0, 0, 0
-
-
 
                 elif cur_menu == "PROTECT SUBMENU":
                     if event.key == pygame.K_UP:
@@ -1259,19 +1341,28 @@ def main():
                             
         if is_attacking:
             if attack_timer > 25: # First phase of the animation
-                hero.x -= 20
-                hero.y -= 10
+                hero.x += (enemy.base_x - hero.base_x) // 15
+                hero.y += (enemy.base_y - hero.base_y) // 15
+                if synergy_partner:
+                    synergy_partner.x += (enemy.base_x - synergy_partner.base_x) // 15
+                    synergy_partner.y += (enemy.base_y - synergy_partner.base_y) // 15
             elif attack_timer > 15: # Second phase of the animation
                 pass
             elif attack_timer > 0:
-                hero.x += 20
-                hero.y += 10
+                hero.x -= (enemy.base_x - hero.base_x) // 15
+                hero.y -= (enemy.base_y - hero.base_y) // 15
+                if synergy_partner:
+                    synergy_partner.x -= (enemy.base_x - synergy_partner.base_x) // 15
+                    synergy_partner.y -= (enemy.base_y - synergy_partner.base_y) // 15
 
             attack_timer -= 1 # Countdown timer
 
             if attack_timer == 0:
                 is_attacking = False
                 hero.x, hero.y = hero.base_x, hero.base_y
+                if synergy_partner:
+                    synergy_partner.x, synergy_partner.y = synergy_partner.base_x, synergy_partner.base_y
+                    synergy_partner = None
                 enemy_is_attacking = True
                 enemy_attack_timer = 40
                 
@@ -1279,19 +1370,24 @@ def main():
             if enemy_attack_timer == 40:
                 current_attacker.last_attack_blocked = False
                 current_attacker.failed_block_attempt = False
-                if not controlled_hero and living_uncontrolled_heroes and random.randint(1, 10) == 1:
+                if not controlled_hero and len(living_uncontrolled_heroes) > 1 and random.randint(1, 10) == 1:
                     target = random.choice(living_uncontrolled_heroes)
                     target.is_controlled = True
                     target.is_protecting_target = None
                     target.original_image = target.image
                     target.image = target.controlled_image
                     target.x, target.y = enemy.x + 180, enemy.y + 50
+
+                    for p in party:
+                        if p.is_protecting_target == target:
+                            p.is_protecting_target = None
+
                     enemy_is_attacking = False
                     enemy_attack_timer = 0
                     enemy_turn_count += 1
                     enemy_turns_remaining -= 1
                     active_hero_index = (active_hero_index + 1) % len(party)
-                    while party[active_hero_index].hp <= 0 or party[active_hero_index].is_controlled:
+                    if party[active_hero_index].hp <= 0 or party[active_hero_index].is_controlled:
                         active_hero_index = (active_hero_index + 1) % len(party)
                     cur_menu = "MAIN BATTLE MENU"
                     cur_col, cur_row, sub_row = 0, 0, 0
@@ -1304,27 +1400,49 @@ def main():
                     else:
                         target_hero = random.choice(living_uncontrolled_heroes)
 
+            protector = None
+            for p in party:
+                if p.is_protecting_target == target_hero and p.hp > 0:
+                    protector = p
+                    break
+
             if enemy_attack_timer > 25: # First phase of the animation
-                current_attacker.x += 20
-                current_attacker.y += 10
+                if controlled_hero:
+                    current_attacker.x += (target_hero.base_x - enemy.x - 120) // 15
+                    current_attacker.y += (target_hero.base_y - enemy.y + 15) // 15
+                else:
+                    current_attacker.x += (target_hero.base_x - current_attacker.base_x) // 15
+                    current_attacker.y += (target_hero.base_y - current_attacker.base_y) // 15
+                if protector:
+                    protector.x += (target_hero.base_x - protector.base_x - 40) // 10
+                    protector.y += (target_hero.base_y - protector.base_y - 40) // 10
             elif enemy_attack_timer > 15: # Second phase of the animation
                 icon_font = pygame.font.SysFont("Arial", 40, bold=True)
                 expected_key_display = BLOCK_KEYS[target_hero.name].upper()
                 icon_surf = icon_font.render(f"! {expected_key_display}", True, red)
                 virtual_screen.blit(icon_surf, (target_hero.x + 120, target_hero.y + 20))
             elif enemy_attack_timer > 0:
-                current_attacker.x -= 20
-                current_attacker.y -= 10
+                if controlled_hero:
+                    current_attacker.x -= (target_hero.base_x - enemy.x - 120) // 15
+                    current_attacker.y -= (target_hero.base_y - enemy.y + 15) // 15
+                else:
+                    current_attacker.x -= (target_hero.base_x - current_attacker.base_x) // 15
+                    current_attacker.y -= (target_hero.base_y - current_attacker.base_y) // 15
+                if protector:
+                    protector.x -= (target_hero.base_x - protector.base_x - 40) // 10
+                    protector.y -= (target_hero.base_y - protector.base_y - 40) // 10
 
             enemy_attack_timer -= 1
 
             if enemy_attack_timer == 0:
                 enemy_is_attacking = False
+                if protector:
+                    protector.x, protector.y = protector.base_x, protector.base_y
+                target_hero.take_damage(random.randint(100,150), party, attacker=current_attacker)
                 if controlled_hero:
                     controlled_hero.x, controlled_hero.y = enemy.x + 180, enemy.y + 50
                 else:
                     enemy.x, enemy.y = enemy.base_x, enemy.base_y
-                target_hero.take_damage(random.randint(100,150), party, attacker=current_attacker)
                 enemy_turn_count += 1
                 enemy_turns_remaining -= 1
                 if enemy_turns_remaining <= 0:
@@ -1334,33 +1452,6 @@ def main():
                 for move_key in hero.cooldowns:
                     if hero.cooldowns[move_key] > 0:
                         hero.cooldowns[move_key] -= 1
-
-        if enemy.hp <= 0:
-            print("Enemy turns before reset:", enemy_turn_count)
-            enemy_turn_count = 0
-            enemy_turns_remaining = MAX_ENEMY_TURNS
-            music.stop()
-            pygame.time.delay(1000)
-            run_enabler_menu(virtual_screen, window, display_res, font, small_font, party, cursor_sound, confirm_sound)
-            reset_battle(party, enemy)
-            music.play(-1)
-            active_hero_index = 0
-            cur_menu = "MAIN BATTLE MENU"
-            cur_col, cur_row, sub_row = 0, 0, 0
-            continue
-        
-        if all(hero.hp <= 0 for hero in party):
-            enemy_turn_count = 0
-            enemy_turns_remaining = MAX_ENEMY_TURNS
-            music.stop()
-            pygame.time.delay(1000)
-            run_enabler_menu(virtual_screen, window, display_res, font, small_font, party, cursor_sound, confirm_sound)
-            reset_battle(party, enemy)
-            music.play(-1)
-            active_hero_index = 0
-            cur_menu = "MAIN BATTLE MENU"
-            cur_col, cur_row, sub_row = 0, 0, 0
-            continue
 
         scaled_surface = pygame.transform.smoothscale(virtual_screen, display_res)
         window.blit(scaled_surface, (0, 0))
