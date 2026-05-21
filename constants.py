@@ -54,11 +54,11 @@ DESCRIPTIONS = {
         "Consumes 1 Chi level. Deals more than double the damage of Brute Force."
     ),
     "Twin Cast": (
-        "The next spell cast by any ally will be duplicated, with the duplicate costing "
+        "The next spell cast by any hero will be duplicated, with the duplicate costing "
         "0 MP but only dealing half the damage of the first. Cooldown: 3 turns."
     ),
     "Protect Stance": (
-        "Any ally can enter this stance and choose one other ally to protect and gain synergy bars with. "
+        "Any hero can enter this stance and choose one other hero to protect and gain synergy bars with. "
         "If an attack is directed at the protected target and the normal block command is successful, "
         "the damage is nullified for that attack and both the protector and the protected gain 1 synergy bar. "
         "If the block fails, both take half the attack damage. The stance ends at the end of each party rotation. "
@@ -68,7 +68,7 @@ DESCRIPTIONS = {
 
     "Heavenly Descent": "Ethan's Level 2 Potential Breach. Deals significant damage.",
 
-    "Final Blow": "Ethan's Level 3 Potential. Ethan's most powerful attack.",
+    "Final Blow": "Ethan's Level 3 Potential Breach. Ethan's most powerful attack.",
 
     "Spinning Kick": "Elena's Level 1 Potential Breach. Elena's weakest Potential Breach.",
 
@@ -84,9 +84,9 @@ DESCRIPTIONS = {
 
     "Vicious Dash": "For Ethan and Elena. Requires 3 Synergy bars. Deals moderate damage and raises the potential level of the characters who performed it.",
 
-    "Explosive Impact": "For Ethan and Evelyn. Requires 3 Synergy bars. Deals moderate damage and grants unpotentialed MP for the next spell of each character who performed it.",
+    "Explosive Impact": "For Ethan and Evelyn. Requires 3 Synergy bars. Deals moderate damage and grants unlimited MP for the next spell of each character who performed it.",
 
-    "Synchro Blast": "For Elena and Evelyn. Requires 4 Synergy bars. Deals moderate damage and grants both a potential level increase for each character who performed it and 0 MP cost MP for each of their next spell castings.",
+    "Synchro Blast": "For Elena and Evelyn. Requires 4 Synergy bars. Deals moderate damage and grants both a potential level increase for each character who performed it and 0 MP cost for each of their next spell castings.",
 
     "Back": "Return to the previous menu.",
 
@@ -94,11 +94,11 @@ DESCRIPTIONS = {
 
     "Manipulate": "Choose who the enemy targets for their next attack. Costs 8 MP.",
 
-    "Potential Seize": "Absorb the entire Potential Gauge of a chosen ally. Costs 17 MP.",
+    "Potential Seize": "Absorb the entire Potential Gauge of a chosen hero. Costs 17 MP.",
 
-    "Revive": "Revives a fallen ally with a small portion of their health restored. Costs 8 MP.",
+    "Revive": "Revives a fallen hero with a small portion of their health restored. Costs 8 MP.",
 
-    "Rebirth": "Revives a fallen ally and fully restore their HP. Costs 18 MP.",
+    "Rebirth": "Revives a fallen hero and fully restore their HP. Costs 18 MP.",
 
     "Healing": "Recovers a moderate amount of HP. Costs 9 MP.",
 
